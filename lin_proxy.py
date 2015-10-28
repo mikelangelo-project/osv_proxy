@@ -164,179 +164,198 @@ class ServerSocket(socket.socket):
         return connection, client_address
 
 
-def proxy_loop():
-    """
-    proxy_loop sits between usual linux orted and mpi_program.so.
-    proxy_loop is run by orted (forx+execve).
-    proxy_loop spins up a new OSv container, in OSv container runs a osv_prosy.so, and osv_proxy.so will run
-    mpi_program.so.
+class Proxy:
+    def __init__(self):
+        # sockets to get IO from mpi_program.so in OSv, and put data to our parent orted.
+        self.server_in = None
+        self.server_out = None
+        self.server_err = None
 
-    orted expects mpi_program to:
-      use MPI_* env variables.
-      mpi_program stdin/out/err are captured by orted, as orted already redirects them to new file descriptors before
-       exec.
+    def redirect_stdio(self):
+        log = logging.getLogger(__name__)
 
-    proxy_loop will replace its stdin/out/err with sockets, then it runs osv_proxy.so,
-    with environmnet variables set so that osv_proxy knows where are magic sockets.
-    Osv_proxy then replaces its stdin/out/err with connections to sockets, and then it starts mpi_program.so (as a
-    thread).
-    """
-    log = logging.getLogger(__name__)
-    delay = Delay()
+        fobj = sys.__stdin__
+        sys.__stdin__ = None
+        sys.stdin = sys.__stdin__
+        server_in = ServerSocket('STDIN', fobj)
+        server_in.do_listen('localhost', 2300)
+        self.server_in = server_in
+        #
+        fobj = sys.__stdout__
+        sys.__stdout__ = open('/tmp/stdout', 'w')
+        sys.stdout = sys.__stdout__
+        server_out = ServerSocket('STDOUT', fobj)
+        server_out.do_listen('localhost', 2300)
+        self.server_out = server_out
+        #
+        fobj = sys.__stderr__
+        sys.__stderr__ = open('/tmp/stderr', 'w')
+        sys.stderr = sys.__stderr__
+        server_err = ServerSocket('STDERR', fobj)
+        server_err.do_listen('localhost', 2300)
+        self.server_err = server_err
 
-    fobj = sys.__stdin__
-    sys.__stdin__ = None
-    sys.stdin = sys.__stdin__
-    server_in = ServerSocket('STDIN', fobj)
-    server_in.do_listen('localhost', 2300)
-    #
-    fobj = sys.__stdout__
-    sys.__stdout__ = open('/tmp/stdout', 'w')
-    sys.stdout = sys.__stdout__
-    server_out = ServerSocket('STDOUT', fobj)
-    server_out.do_listen('localhost', 2300)
-    #
-    fobj = sys.__stderr__
-    sys.__stderr__ = open('/tmp/stderr', 'w')
-    sys.stderr = sys.__stderr__
-    server_err = ServerSocket('STDERR', fobj)
-    server_err.do_listen('localhost', 2300)
+    def proxy_loop(self):
+        """
+        proxy_loop sits between usual linux orted and mpi_program.so.
+        proxy_loop is run by orted (fork+execve).
+        proxy_loop spins up a new OSv container, in OSv container runs a osv_prosy.so, and osv_proxy.so will run
+        mpi_program.so.
 
-    # Sockets from which we expect to read
-    inputs = [server_in, server_in.fobj, server_out, server_err]
-    # include  server_in.fobj in inputs now, but read and forward data only once we also have client connection
-    # on server_in listen socket
+        orted expects mpi_program to:
+          use MPI_* env variables.
+          mpi_program stdin/out/err are captured by orted, as orted already redirects them to new file descriptors before
+           exec.
 
-    # Sockets to which we expect to write
-    outputs = []
+        proxy_loop will replace its stdin/out/err with sockets, then it runs osv_proxy.so,
+        with environmnet variables set so that osv_proxy knows where are magic sockets.
+        Osv_proxy then replaces its stdin/out/err with connections to sockets, and then it starts mpi_program.so (as a
+        thread).
+        """
+        log = logging.getLogger(__name__)
+        delay = Delay()
+        server_in = self.server_in
+        server_out = self.server_out
+        server_err = self.server_err
 
-    # Outgoing message queues (socket:Queue)
-    message_queues = {}
+        # Sockets from which we expect to read
+        inputs = [server_in, server_in.fobj, server_out, server_err]
+        # include  server_in.fobj in inputs now, but read and forward data only once we also have client connection
+        # on server_in listen socket
 
-    while inputs:
+        # Sockets to which we expect to write
+        outputs = []
 
-        # Wait for at least one of the sockets to be ready for processing
-        log.debug('waiting for the next event')
-        readable, writable, exceptional = select.select(inputs, outputs, inputs)
-        # print 'print in python prog'  # should go to file, not to screen/pty
+        # Outgoing message queues (socket:Queue)
+        message_queues = {}
 
-        # Handle inputs
-        for s in readable:
+        while inputs:
 
-            if s in [server_in, server_out, server_err]:
-                # A "readable" server socket is ready to accept a connection
-                connection, client_address = s.accept()
-                #
-                # Trigger 'TypeError: not all arguments converted during string formatting' to stdout/err
-                # log.info('DO TRIGGER ERROR', 11, 22, 33)
-                #
-                if connection and s in [server_out, server_err]:
-                    log.info('new connection from %s', client_address)
-                    connection.setblocking(0)
-                    assert(connection not in inputs)
-                    inputs.append(connection)
-                    # Give the connection a queue for data we want to send
-                    assert(s.fobj not in message_queues)
-                    message_queues[s.fobj] = Queue.Queue()
-                    delay.dec(0)
-                elif connection and s in [server_in]:
-                    # we will only write to that connection
-                    log.info('new "reverse" connection from %s', client_address)
-                    connection.setblocking(0)
-                    assert(connection not in message_queues)
-                    message_queues[connection] = Queue.Queue()
-                    # only to detect that connection was closed by peer
-                    assert(connection not in inputs)
-                    inputs.append(connection)
-                    delay.dec(0)
-            elif s in [server_out.connection, server_err.connection]:
-                # opened client-server connection
-                conn = s
-                data = conn.recv(1024)
-                if data:
-                    # A readable client socket has data
-                    log.debug('received "%s" from %s', data.encode('string_escape'), conn.getpeername())
-                    fobj = ServerSocket.map_connection[conn].fobj
-                    message_queues[fobj].put(data)
-                    # Add output channel for response
-                    if fobj not in outputs:
-                        outputs.append(fobj)
-                    delay.dec(0)
-                else:
-                    # Interpret empty result as closed connection
-                    log.info('closing %s after reading no data', conn.getpeername())
-                    # Stop listening for input on the connection
-                    if conn in outputs:
-                        outputs.remove(conn)
-                    inputs.remove(conn)
-                    conn.close()
-                    fobj = ServerSocket.map_connection[conn].fobj
-                    ServerSocket.remove_connection(conn)
-                    # Remove message queue
-                    del message_queues[fobj]
-                    delay.dec(0)
-            elif s in [server_in.connection]:
-                # only to detect that peer closed connection
-                conn = s
-                data = conn.recv(1024)
-                if data:
-                    log.warning('data recv in stdin output sock %s, ignore', conn.getpeername())
-                else:
-                    # Interpret empty result as closed connection
-                    log.info('closing stdin output sock %s', conn.getpeername())
-                    inputs.remove(conn)
-                    conn.close()
-                    ServerSocket.remove_connection(conn)
-                    del message_queues[conn]
-                    delay.dec(0)
-            elif s in [server_in.fobj]:
-                fobj = s
-                conn = server_in.connection
-                if conn:
-                    data = fobj.readline()  # stdin.readline() returns at ENTER, while read() at Ctrl+D
-                    if data:
-                        log.info('Read data from %s', fobj.name)
-                        message_queues[conn].put(data)
-                        if conn not in outputs:
-                            outputs.append(conn)
+            # Wait for at least one of the sockets to be ready for processing
+            log.debug('waiting for the next event')
+            readable, writable, exceptional = select.select(inputs, outputs, inputs)
+            # print 'print in python prog'  # should go to file, not to screen/pty
+
+            # Handle inputs
+            for s in readable:
+
+                if s in [server_in, server_out, server_err]:
+                    # A "readable" server socket is ready to accept a connection
+                    connection, client_address = s.accept()
+                    #
+                    # Trigger 'TypeError: not all arguments converted during string formatting' to stdout/err
+                    # log.info('DO TRIGGER ERROR', 11, 22, 33)
+                    #
+                    if connection and s in [server_out, server_err]:
+                        log.info('new connection from %s', client_address)
+                        connection.setblocking(0)
+                        assert(connection not in inputs)
+                        inputs.append(connection)
+                        # Give the connection a queue for data we want to send
+                        assert(s.fobj not in message_queues)
+                        message_queues[s.fobj] = Queue.Queue()
                         delay.dec(0)
-            else:
-                log.info('Unexpected readable %s', str(s))
-                sleep(1)
+                    elif connection and s in [server_in]:
+                        # we will only write to that connection
+                        log.info('new "reverse" connection from %s', client_address)
+                        connection.setblocking(0)
+                        assert(connection not in message_queues)
+                        message_queues[connection] = Queue.Queue()
+                        # only to detect that connection was closed by peer
+                        assert(connection not in inputs)
+                        inputs.append(connection)
+                        delay.dec(0)
+                elif s in [server_out.connection, server_err.connection]:
+                    # opened client-server connection
+                    conn = s
+                    data = conn.recv(1024)
+                    if data:
+                        # A readable client socket has data
+                        log.debug('received "%s" from %s', data.encode('string_escape'), conn.getpeername())
+                        fobj = ServerSocket.map_connection[conn].fobj
+                        message_queues[fobj].put(data)
+                        # Add output channel for response
+                        if fobj not in outputs:
+                            outputs.append(fobj)
+                        delay.dec(0)
+                    else:
+                        # Interpret empty result as closed connection
+                        log.info('closing %s after reading no data', conn.getpeername())
+                        # Stop listening for input on the connection
+                        if conn in outputs:
+                            outputs.remove(conn)
+                        inputs.remove(conn)
+                        conn.close()
+                        fobj = ServerSocket.map_connection[conn].fobj
+                        ServerSocket.remove_connection(conn)
+                        # Remove message queue
+                        del message_queues[fobj]
+                        delay.dec(0)
+                elif s in [server_in.connection]:
+                    # only to detect that peer closed connection
+                    conn = s
+                    data = conn.recv(1024)
+                    if data:
+                        log.warning('data recv in stdin output sock %s, ignore', conn.getpeername())
+                    else:
+                        # Interpret empty result as closed connection
+                        log.info('closing stdin output sock %s', conn.getpeername())
+                        inputs.remove(conn)
+                        conn.close()
+                        ServerSocket.remove_connection(conn)
+                        del message_queues[conn]
+                        delay.dec(0)
+                elif s in [server_in.fobj]:
+                    fobj = s
+                    conn = server_in.connection
+                    if conn:
+                        data = fobj.readline()  # stdin.readline() returns at ENTER, while read() at Ctrl+D
+                        if data:
+                            log.info('Read data from %s', fobj.name)
+                            message_queues[conn].put(data)
+                            if conn not in outputs:
+                                outputs.append(conn)
+                            delay.dec(0)
+                else:
+                    log.info('Unexpected readable %s', str(s))
+                    sleep(1)
 
-        # Handle outputs
-        for wr in writable:
-            try:
-                next_msg = message_queues[wr].get_nowait()
-            except Queue.Empty:
-                # No messages waiting so stop checking for writability.
-                log.debug('output queue for %s is empty', obj_name(wr))
-                outputs.remove(wr)
-            else:
-                if wr in [server_in.connection, server_out.fobj, server_err.fobj]:
-                    log.debug('sending "%s" to %s', next_msg.encode('string_escape'), obj_name(wr))
-                    obj_write(wr, next_msg)
-                # elif fobj in [server_in.connection]:
-        # Handle "exceptional conditions"
-        for s in exceptional:
-            # TODO ...
-            log.info('handling exceptional condition for %s', s.getpeername())
-            # Stop listening for input on the connection
-            inputs.remove(s)
-            if s in outputs:
-                outputs.remove(s)
-            s.close()
+            # Handle outputs
+            for wr in writable:
+                try:
+                    next_msg = message_queues[wr].get_nowait()
+                except Queue.Empty:
+                    # No messages waiting so stop checking for writability.
+                    log.debug('output queue for %s is empty', obj_name(wr))
+                    outputs.remove(wr)
+                else:
+                    if wr in [server_in.connection, server_out.fobj, server_err.fobj]:
+                        log.debug('sending "%s" to %s', next_msg.encode('string_escape'), obj_name(wr))
+                        obj_write(wr, next_msg)
+                    # elif fobj in [server_in.connection]:
+            # Handle "exceptional conditions"
+            for s in exceptional:
+                # TODO ...
+                log.info('handling exceptional condition for %s', s.getpeername())
+                # Stop listening for input on the connection
+                inputs.remove(s)
+                if s in outputs:
+                    outputs.remove(s)
+                s.close()
 
-            # Remove message queue
-            del message_queues[s]
+                # Remove message queue
+                del message_queues[s]
 
-        delay.sleep()
-        delay.inc()
+            delay.sleep()
+            delay.inc()
 
 
 def main():
     log = logging.getLogger(__name__)
-    proxy_loop()
+    proxy = Proxy()
+    #
+    proxy.redirect_stdio()
+    proxy.proxy_loop()
 
 
 def setup_logging():
