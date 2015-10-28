@@ -49,9 +49,37 @@ def delay_dec(new_delay = delay_min):
 
 def main():
     log = logging.getLogger(__name__)
-    open('/tmp/stdin', 'w').close()
-    fd0 = open('/tmp/stdin', 'r')
+    if 0:
+        open('/tmp/stdin', 'w').close()
+        fd0 = open('/tmp/stdin', 'r')
+    else:
+        fd0 = sys.__stdin__
+        open('/tmp/stdin', 'w').close()  # remove old content
+        fd_in = open('/tmp/stdin', 'r')
+        sys.__stdin__ = None  # so that python doesn't use fd==0 as input
+        sys.stdin = sys.__stdin__
+        log.info('sys.stdin     %s', str(sys.stdin))
+        log.info('sys.__stdin__ %s', str(sys.__stdin__))
     fd1 = open('/tmp/stdout', 'w')
+
+    while 0:
+        line = input()  # problem at file EOF
+        print('LINE ' + line)
+        if line == 'e':
+            break
+    while 0:
+        line = fd0.read()  # works, but requires Ctrl+d at and of input, Enter is not enough
+        print('LINE ' + line)
+        if line in ['e', 'e\n']:
+            break
+    while 1:
+        line = fd0.readline()  # works, flush is at enter
+        print('LINE ' + line)
+        if not line:
+            # no input
+            time.sleep(0.010)
+        if line in ['e', 'e\n']:
+            break
 
     inputs = [fd0]
     outputs = []
@@ -63,14 +91,16 @@ def main():
     while inputs:
         # Wait for at least one of the sockets to be ready for processing
         # The file fd are 'ready' also on EOF - is that reason the file in descriptor is always ready?
-        #### log.debug('waiting for the next event')
+        log.debug('waiting for the next event')
         readable, writable, exceptional = select.select(inputs, outputs, inputs)
         for s in readable:
             if s in [fd0]:
-                #### log.info('data in %s', s.name)
+                log.info('data in %s', s.name)
                 # assert(fd1 not in message_queues)
                 # message_queues[fd1] = Queue.Queue()
-                data = fd0.read()
+                ## data = fd0.read() # blocks on stdin
+                data = fd0.readline() # blocks on stdin
+                log.info('data from %s (len=%d)', fd0.name, len(data))
                 if data:
                     delay_dec(0)
                     log.info('copy data from %s to %s (len=%d)', fd0.name, fd1.name, len(data))
