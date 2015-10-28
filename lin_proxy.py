@@ -2,7 +2,7 @@
 
 import sys
 import os
-import subprocess
+# import subprocess32 as subprocess
 import logging
 import logging.config
 import requests
@@ -354,7 +354,20 @@ def main():
     log = logging.getLogger(__name__)
     proxy = Proxy()
     #
+    # run new VM
+    # unsafe-cache for NFS mount
+    vm = VM(debug=True, extra='--unsafe-cache')
+    vm.run()
+
     proxy.redirect_stdio()
+    # TCP sockets are listening now, vm can run the osv_proxy.so and mpi_program.so.
+
+    # vm.env().set()
+    vm.app('libhttpserver.so').run()
+    # mpi_program = '/usr/lib/mpi_hello.so'
+    # vm.app('/usr/lib/osv_proxy.so ' + mpi_program).run()
+
+    # start forwarding socket <-> std IO data
     proxy.proxy_loop()
 
 
@@ -400,6 +413,10 @@ if __name__ == '__main__':
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info('Start /*--------------------------------*/')
+    ii = 0
+    for arg in sys.argv:
+        logger.info('  argv[%d] = %s', ii, arg)
+        ii += 1
     main()
     logger.info('Done /*--------------------------------*/')
 
