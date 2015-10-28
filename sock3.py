@@ -95,11 +95,16 @@ def example():
     server_in = ServerSocket('STDIN', fobj)
     server_in.do_listen('localhost', 2300)
     #
-    fobj = open('/tmp/stdout', 'w')
+    fobj = sys.__stdout__
+    sys.__stdout__ = open('/tmp/stdout', 'w')
+    sys.stdout = sys.__stdout__
     server_out = ServerSocket('STDOUT', fobj)
     server_out.do_listen('localhost', 2300)
     #
-    fobj = open('/tmp/stderr', 'w')
+    #fobj = open('/tmp/stderr', 'w')
+    fobj = sys.__stderr__
+    sys.__stderr__ = open('/tmp/stderr', 'w')
+    sys.stderr = sys.__stderr__
     server_err = ServerSocket('STDERR', fobj)
     server_err.do_listen('localhost', 2300)
 
@@ -119,6 +124,7 @@ def example():
         # Wait for at least one of the sockets to be ready for processing
         log.debug('waiting for the next event')
         readable, writable, exceptional = select.select(inputs, outputs, inputs)
+        # print 'print in python prog'  # should go to file, not to screen/pty
 
         # Handle inputs
         for s in readable:
