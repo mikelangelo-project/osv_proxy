@@ -150,6 +150,9 @@ def example():
                     connection.setblocking(0)
                     assert(connection not in message_queues)
                     message_queues[connection] = Queue.Queue()
+                    # only to detect that connection was closed by peer
+                    assert(connection not in inputs)
+                    inputs.append(connection)
             elif s in [server_out._connection, server_err._connection]:
                 # opened client-server connection
                 conn = s
@@ -175,6 +178,19 @@ def example():
 
                     # Remove message queue
                     del message_queues[fobj]
+            elif s in [server_in._connection]:
+                # only to detect that peer closed connection
+                conn = s
+                data = conn.recv(1024)
+                if data:
+                    log.warning('data recv in stdin output sock %s, ignore', conn.getpeername())
+                else:
+                    # Interpret empty result as closed connection
+                    log.info('closing stdin output sock %s', conn.getpeername())
+                    inputs.remove(conn)
+                    conn.close()
+                    ServerSocket.remove_connection(conn)
+                    del message_queues[conn]
             elif s in [server_in._fobj]:
                 fobj = s
                 conn = server_in._connection
