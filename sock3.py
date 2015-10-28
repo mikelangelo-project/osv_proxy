@@ -8,6 +8,7 @@ import select
 import socket
 import sys
 import Queue
+import time
 
 # https://pymotw.com/2/select/
 
@@ -28,9 +29,9 @@ class ServerSocket(socket.socket):
         self._connection = None  # a single connection to/from fobj is allowed
 
     def do_listen(self, addr, port0):
-        '''
+        """
         Listen at address addr, and next free port >= port0
-        '''
+        """
         log = logging.getLogger(__name__)
         port = port0
         while port < 2**16:
@@ -52,7 +53,8 @@ class ServerSocket(socket.socket):
         log = logging.getLogger(__name__)
         connection, client_address = super(ServerSocket, self).accept()
         if self._connection:
-            log.error('Multiple connection not allowed, from %s to %s', str(client_address), str(self.getsockname()))
+            log.error('%s Multiple connection not allowed, from %s to %s',
+                      self._log_prefix, str(client_address), str(self.getsockname()))
             connection.close()
             return None, None
         self._connection = connection
@@ -60,22 +62,50 @@ class ServerSocket(socket.socket):
         return connection, client_address
 
 
+def obj_name(obj):
+    """
+    obj can be socket.socket connection, or file object.
+    Return descriptive name for socket or file.
+    """
+    if isinstance(obj, file):
+        return obj.name
+    elif isinstance(obj, socket.socket):
+        return str(obj.getsockname())
+
+
+def obj_write(obj, data):
+    if isinstance(obj, file):
+        obj.write(data)
+        obj.flush()
+    elif isinstance(obj, socket.socket):
+        obj.send(data)
+
+
 def example():
     log = logging.getLogger(__name__)
 
-    fobj = open('/tmp/stdout', 'w')
-    rw_map = {}
-
-    # Create a TCP/IP socket
+    open('/tmp/stdin', 'w').close()  # touch file
+    # buffering 0 = unbuffered, 1 = line buffered, more - approx buffer size in B
+    fobj = open('/tmp/stdin', 'r', buffering=0)
+    # fobj = sys.__stdin__
+    server_in = ServerSocket('STDIN', fobj)
+    server_in.do_listen('localhost', 2300)
+    #
     fobj = open('/tmp/stdout', 'w')
     server_out = ServerSocket('STDOUT', fobj)
     server_out.do_listen('localhost', 2300)
+    #
+    fobj = open('/tmp/stderr', 'w')
+    server_err = ServerSocket('STDERR', fobj)
+    server_err.do_listen('localhost', 2300)
 
     # Sockets from which we expect to read
-    inputs = [ server_out ]
+    inputs = [server_in, server_in._fobj, server_out, server_err]
+    # include  server_in._fobj in inputs now, but read and forward data only once we also have client connection
+    # on server_in listen socket
 
     # Sockets to which we expect to write
-    outputs = [ ]
+    outputs = []
 
     # Outgoing message queues (socket:Queue)
     message_queues = {}
@@ -89,62 +119,82 @@ def example():
         # Handle inputs
         for s in readable:
 
-            if s in [server_out]:
+            if s in [server_in, server_out, server_err]:
                 # A "readable" server socket is ready to accept a connection
                 connection, client_address = s.accept()
                 #
                 # Trigger 'TypeError: not all arguments converted during string formatting' to stdout/err
                 # log.info('DO TRIGGER ERROR', 11, 22, 33)
                 #
-                if connection:
+                if connection and s in [server_out, server_err]:
                     log.info('new connection from %s', client_address)
                     connection.setblocking(0)
+                    assert(connection not in inputs)
                     inputs.append(connection)
-
                     # Give the connection a queue for data we want to send
+                    assert(s._fobj not in message_queues)
                     message_queues[s._fobj] = Queue.Queue()
-            elif s in [server_out._connection]:
+                elif connection and s in [server_in]:
+                    # we will only write to that connection
+                    log.info('new "reverse" connection from %s', client_address)
+                    connection.setblocking(0)
+                    assert(connection not in message_queues)
+                    message_queues[connection] = Queue.Queue()
+            elif s in [server_out._connection, server_err._connection]:
                 # opened client-server connection
-                data = s.recv(1024)
+                conn = s
+                data = conn.recv(1024)
                 if data:
                     # A readable client socket has data
-                    log.debug('received "%s" from %s', data.encode('string_escape'), s.getpeername())
-                    fobj = ServerSocket.map_connection[s]._fobj
+                    log.debug('received "%s" from %s', data.encode('string_escape'), conn.getpeername())
+                    fobj = ServerSocket.map_connection[conn]._fobj
                     message_queues[fobj].put(data)
                     # Add output channel for response
                     if fobj not in outputs:
                         outputs.append(fobj)
                 else:
                     # Interpret empty result as closed connection
-                    log.info('closing %s after reading no data', client_address)
+                    log.info('closing %s after reading no data', conn.getpeername())
                     # Stop listening for input on the connection
-                    if s in outputs:
-                        outputs.remove(s)
-                    inputs.remove(s)
-                    s.close()
-                    fobj = ServerSocket.map_connection[s]._fobj
-                    ServerSocket.remove_connection(s)
+                    if conn in outputs:
+                        outputs.remove(conn)
+                    inputs.remove(conn)
+                    conn.close()
+                    fobj = ServerSocket.map_connection[conn]._fobj
+                    ServerSocket.remove_connection(conn)
 
                     # Remove message queue
                     del message_queues[fobj]
-            # elif s in [server_in._fobj]:
+            elif s in [server_in._fobj]:
+                fobj = s
+                conn = server_in._connection
+                if conn:
+                    data = fobj.read()
+                    if data:
+                        log.info('Read data from %s', fobj.name)
+                        message_queues[conn].put(data)
+                        if conn not in outputs:
+                            outputs.append(conn)
+            else:
+                log.info('Unexpected readable %s', str(s))
+                time.sleep(1)
+
         # Handle outputs
-        for fobj in writable:
+        for wr in writable:
             try:
-                next_msg = message_queues[fobj].get_nowait()
+                next_msg = message_queues[wr].get_nowait()
             except Queue.Empty:
                 # No messages waiting so stop checking for writability.
-                log.debug('output queue for %s is empty', fobj.name)
-                outputs.remove(fobj)
+                log.debug('output queue for %s is empty', obj_name(wr))
+                outputs.remove(wr)
             else:
-                if fobj in [server_out._fobj]:
-                    log.debug('sending "%s" to %s', next_msg.encode('string_escape'), fobj.name)
-                    # s.send(next_msg)
-                    fobj.write(next_msg)
-                    fobj.flush()
+                if wr in [server_in._connection, server_out._fobj, server_err._fobj]:
+                    log.debug('sending "%s" to %s', next_msg.encode('string_escape'), obj_name(wr))
+                    obj_write(wr, next_msg)
                 # elif fobj in [server_in._connection]:
         # Handle "exceptional conditions"
         for s in exceptional:
+            # TODO ...
             log.info('handling exceptional condition for %s', s.getpeername())
             # Stop listening for input on the connection
             inputs.remove(s)
@@ -157,15 +207,15 @@ def example():
 
 
 def setup_logging():
-    level = logging.INFO
+    # level = logging.INFO
     level = logging.DEBUG
-    file = '/tmp/orted_lin_proxy.log'
+    logfile = '/tmp/orted_lin_proxy.log'
     LOGGING = {
         'version': 1,
         'disable_existing_loggers': True,
         'formatters': {
             'verbose': {
-#                'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
+                # 'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
                 'format': '%(levelname) 8s %(asctime)s %(module)s %(thread)d %(message)s'
             },
             'simple': {
@@ -173,23 +223,23 @@ def setup_logging():
             },
         },
         'handlers': {
-            'console':{
-                'level':'DEBUG',
-                'class':'logging.NullHandler',
+            'console': {
+                'level': 'DEBUG',
+                'class': 'logging.NullHandler',
                 'formatter': 'simple'
             },
             'file': {
                 'level': 'DEBUG',
                 'class': 'logging.FileHandler',
                 'formatter': 'verbose',
-                'filename': file,
+                'filename': logfile,
             },
         },
         'loggers': {
             '': {
-                'handlers':['file'],
+                'handlers': ['file'],
                 'propagate': False,
-                'level':level,
+                'level': level,
             },
         }
     }
