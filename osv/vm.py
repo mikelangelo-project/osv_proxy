@@ -280,6 +280,24 @@ class VM:
         self.wait_ip(Td, Td2)
         self.wait_cmd_prompt(Td, Td2)
 
+    def app(self, name):
+        # circular dependency import
+        import api
+        api = api.App(self, name)
+        return api
+
+    def env(self, name=None):
+        # circular dependency import
+        import api
+        if name is None:
+            # all env vars
+            api = api.EnvAll(self)
+            return api
+        else:
+            # known env variable name
+            api = api.Env(self, name)
+            return api
+
 logging.basicConfig(level=logging.DEBUG)
 
 ##

@@ -36,16 +36,19 @@ class TestApi(unittest.TestCase):
         self.assertTrue('OSV_VERSION' in ret.keys())
 
     def test_env_var(self):
+        # set string
         var1 = Env(self.vm, 'var1')
         var1.set('asdf')
         ret = var1.get()
         self.assertEquals('asdf', ret)
         #
+        # int auto-converted to string
         var2 = Env(self.vm, 'var2')
         var2.set(123)
         ret = var2.get()
         self.assertEquals('123', ret)
         #
+        # special char
         var1.set('sss"ttrt')
         ret = var1.get()
         self.assertEquals('sss"ttrt', ret)
@@ -70,5 +73,21 @@ class TestApi(unittest.TestCase):
         except ApiResponseError as ex:
             self.assertEquals(ex.response.status_code, 500)
 
+    # But syntax without additional api instance seems nicer.
+    def test_via_vm_app(self):
+        vm = self.vm
+        vm.app('/libhttpserver.so').run()
+
+    def test_via_vm_env(self):
+        vm = self.vm
+        vm.env('var_bla').set('bla_value')
+        val = vm.env('var_bla').get()
+        self.assertEqual('bla_value', val)
+
+    def test_via_vm_env_all(self):
+        vm = self.vm
+        # env() with no name means 'all'
+        val = vm.env().get()
+        self.assertTrue('OSV_VERSION' in val)
 
 ##
