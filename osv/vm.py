@@ -46,6 +46,11 @@ class VMParam:
                  debug=False,
                  extra=[]
                  ):
+        if isinstance(extra, str):
+            # If single string is passed, interpret it as a single argument.
+            # And extra should be list.
+            extra = [extra]
+        assert(isinstance(extra, list))
         self._extra = extra  # args to blindly pass-trough to run.py
         self._command = command
         self._cpus = cpus
