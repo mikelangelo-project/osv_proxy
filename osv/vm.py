@@ -43,7 +43,10 @@ class VMParam:
                  gdb=False,
                  gdb_port=0,
                  verbose=False,
-                 debug=False):
+                 debug=False,
+                 extra=[]
+                 ):
+        self._extra = extra  # args to blindly pass-trough to run.py
         self._command = command
         self._cpus = cpus
         self._memory = memory
@@ -131,6 +134,8 @@ class VMParam:
             full_command = self._command
         if full_command:
             arg.extend(['-e', full_command])
+
+        arg.extend(self._extra)
 
         return arg
 
