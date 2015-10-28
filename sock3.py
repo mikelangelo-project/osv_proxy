@@ -81,8 +81,31 @@ def obj_write(obj, data):
         obj.send(data)
 
 
+class Delay():
+    def __init__(self, _min = 0.0001, _max = 0.1):
+        # delay_max 0.1 - "0.0%" CPU usage, 0.01 - 0.3%, 0.001 - 2.3%, 0.0001 - 9.0%
+        self.min = _min
+        self.max = _max
+        self.value = _min
+
+    def inc(self):
+        self.value *= 2
+        self.value = max(self.value, self.min)
+        self.value = min(self.value, self.max)
+
+    def dec(self, new_delay = 0.0001):
+        self.value = new_delay
+        # delay be 0, so there is no delay between read from fd0 and write to fd1
+        # delay = max(delay, delay_min)
+        self.value = min(self.value, self.max)
+
+    def sleep(self):
+        if(self.value):
+            time.sleep(self.value)
+
 def example():
     log = logging.getLogger(__name__)
+    delay = Delay()
 
     if 0:
         open('/tmp/stdin', 'w').close()  # touch file
@@ -144,6 +167,7 @@ def example():
                     # Give the connection a queue for data we want to send
                     assert(s._fobj not in message_queues)
                     message_queues[s._fobj] = Queue.Queue()
+                    delay.dec(0)
                 elif connection and s in [server_in]:
                     # we will only write to that connection
                     log.info('new "reverse" connection from %s', client_address)
@@ -153,6 +177,7 @@ def example():
                     # only to detect that connection was closed by peer
                     assert(connection not in inputs)
                     inputs.append(connection)
+                    delay.dec(0)
             elif s in [server_out._connection, server_err._connection]:
                 # opened client-server connection
                 conn = s
@@ -165,6 +190,7 @@ def example():
                     # Add output channel for response
                     if fobj not in outputs:
                         outputs.append(fobj)
+                    delay.dec(0)
                 else:
                     # Interpret empty result as closed connection
                     log.info('closing %s after reading no data', conn.getpeername())
@@ -175,9 +201,9 @@ def example():
                     conn.close()
                     fobj = ServerSocket.map_connection[conn]._fobj
                     ServerSocket.remove_connection(conn)
-
                     # Remove message queue
                     del message_queues[fobj]
+                    delay.dec(0)
             elif s in [server_in._connection]:
                 # only to detect that peer closed connection
                 conn = s
@@ -191,6 +217,7 @@ def example():
                     conn.close()
                     ServerSocket.remove_connection(conn)
                     del message_queues[conn]
+                    delay.dec(0)
             elif s in [server_in._fobj]:
                 fobj = s
                 conn = server_in._connection
@@ -201,6 +228,7 @@ def example():
                         message_queues[conn].put(data)
                         if conn not in outputs:
                             outputs.append(conn)
+                        delay.dec(0)
             else:
                 log.info('Unexpected readable %s', str(s))
                 time.sleep(1)
@@ -231,7 +259,8 @@ def example():
             # Remove message queue
             del message_queues[s]
 
-        time.sleep(0.1)
+        delay.sleep()
+        delay.inc()
 
 
 def setup_logging():
