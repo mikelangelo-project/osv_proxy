@@ -84,10 +84,14 @@ def obj_write(obj, data):
 def example():
     log = logging.getLogger(__name__)
 
-    open('/tmp/stdin', 'w').close()  # touch file
-    # buffering 0 = unbuffered, 1 = line buffered, more - approx buffer size in B
-    fobj = open('/tmp/stdin', 'r', buffering=0)
-    # fobj = sys.__stdin__
+    if 0:
+        open('/tmp/stdin', 'w').close()  # touch file
+        # buffering 0 = unbuffered, 1 = line buffered, more - approx buffer size in B
+        fobj = open('/tmp/stdin', 'r', buffering=0)
+    else:
+        fobj = sys.__stdin__
+        sys.__stdin__ = None
+        sys.stdin = sys.__stdin__
     server_in = ServerSocket('STDIN', fobj)
     server_in.do_listen('localhost', 2300)
     #
@@ -169,7 +173,7 @@ def example():
                 fobj = s
                 conn = server_in._connection
                 if conn:
-                    data = fobj.read()
+                    data = fobj.readline()  # stdin.readline() returns at ENTER, while read() at Ctrl+D
                     if data:
                         log.info('Read data from %s', fobj.name)
                         message_queues[conn].put(data)
@@ -204,6 +208,8 @@ def example():
 
             # Remove message queue
             del message_queues[s]
+
+        time.sleep(0.1)
 
 
 def setup_logging():
