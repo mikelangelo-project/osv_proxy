@@ -22,7 +22,8 @@ class TestInternal(unittest.TestCase):
 class TestApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.vm = VM(debug=True)
+        net_mac='rand'
+        cls.vm = VM(debug=True, use_image_copy=True, net_mac=net_mac)
         cls.vm.run(wait_up=True)
 
     @classmethod

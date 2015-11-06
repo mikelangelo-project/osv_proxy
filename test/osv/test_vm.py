@@ -86,8 +86,8 @@ class TestVMParam(unittest.TestCase):
 ## /etc/init.d/libvirt-bin restart - to reset DHCP server
 class TestVM(unittest.TestCase):
     def test_run(self, td=1):
-        vm = VM(debug=True)
-        vm.run()
+        vm = VM(debug=True, use_image_copy=True)
+        vm.run(redirect_stdio=True)
         vm.wait_up()
         self.assertTrue(vm._ip)
         self.assertEquals(0, vm._ip.find('192.168.122.'))  # default virbr0 subnet
