@@ -32,8 +32,8 @@ def parse_args():
                        help='VM memory in MB')
     parser.add_argument('--env', default=[], metavar='NAME=VALUE', action='append',
                        help='additional environ variables for OSv')
-    parser.add_argument('--extra', default='',
-                       help='additional params to pass to OSv scripts/run.py')
+    parser.add_argument('-u', '--unsafe-cache', action='store_true',
+                       help='Set cache to unsafe.')
     parser.add_argument('osv_command', nargs=argparse.REMAINDER,
                    help='Application to start in VM (path and arguments)')
     args = parser.parse_args()
@@ -87,6 +87,9 @@ def main():
     # gdb_port = randint(10000, 20000) # enable gdb at rand port
 
     osv_command = ' '.join(args.osv_command)
+    args_extra = ''
+    if args.unsafe_cache:
+        args_extra += '--unsafe-cache'
 
     vm = VM(debug=True,
             image=args.image,
@@ -95,7 +98,7 @@ def main():
             use_image_copy=True,
             net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
             gdb_port=gdb_port,
-            extra=args.extra)
+            extra=args_extra)
     vm.run(wait_up=True, redirect_stdio=settings.OSV_VM_REDIRECT_STDIO)
 
     # Setup environ. orted already setup our env - copy it to VM. Then add additional env vars added by user.
