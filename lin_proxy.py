@@ -96,7 +96,6 @@ def main():
             net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
             gdb_port=gdb_port,
             extra=args.extra)
-    sleep(randint(1,50)/10)  # run.py NBD problem ?
     vm.run(wait_up=True, redirect_stdio=settings.OSV_VM_REDIRECT_STDIO)
 
     # Setup environ. orted already setup our env - copy it to VM. Then add additional env vars added by user.
