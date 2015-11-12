@@ -9,6 +9,7 @@ from os import environ
 from osv import VM, Env
 from random import randint
 import argparse
+from copy import deepcopy
 
 import conf.settings as settings
 
@@ -23,7 +24,7 @@ def copy_env(vm):
         vm.env(name).set(value)
 
 
-def parse_args():
+def parse_args___v0():
     log = logging.getLogger(__name__)
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('-i', '--image', default='',
@@ -39,6 +40,49 @@ def parse_args():
     args = parser.parse_args()
     log.info('Cmdline args: %s' % str(args))
     return args
+
+
+# if we are called as mpirun --lanuch-agent - e.g. instead of real orted.
+def parse_args():
+    log = logging.getLogger(__name__)
+    class Args:
+        pass
+    args = Args()
+    args.unsafe_cache = True
+    args.image = settings.OSV_SRC + '/build/debug/usr.img'
+    args.memory = 1024
+
+    args.env = []
+    args.env = ['MPI_BUFFER_SIZE=2100100', 'TERM=xterm']
+
+    # args.osv_command = '/usr/lib/orted.so /usr/lib/mpi_hello.so'.split()  # list of strings
+    args.osv_command = deepcopy(sys.argv)
+    log.info('sys.argv: %s' % str(sys.argv))
+    assert(args.osv_command[0].endswith('osv_proxy/lin_proxy.py'))
+    args.osv_command[0] = '/usr/lib/orted.so'
+    # remove args "-mca orte_launch_agent /home/justin_cinkelj/devel/mikelangelo/osv_proxy/lin_proxy.py"
+    for ii in range(2, len(args.osv_command)):
+        arg0 = args.osv_command[ii-2]
+        arg1 = args.osv_command[ii-1]
+        arg2 = args.osv_command[ii]
+        log.debug('ii=%d arg0 %s', ii, arg0)
+        if arg0 == '-mca' and arg1 == 'orte_launch_agent' and arg2.endswith('osv_proxy/lin_proxy.py'):
+            log.info('args.osv_command remove: %s' % str(args.osv_command[ii-2: ii+1]))
+            del args.osv_command[ii-2: ii+1]
+            break  # ii is invalid now
+    # escape ';' TODO pipes.quote ?
+    for ii in range(2, len(args.osv_command)):
+        arg0 = args.osv_command[ii-2]
+        arg1 = args.osv_command[ii-1]
+        arg2 = args.osv_command[ii]
+        log.debug('ii=%d arg0 %s', ii, arg0)
+        if arg0 == '-mca' and arg1 == 'orte_hnp_uri' and (';tcp' in arg2):
+            log.info('args.osv_command orte_hnp_uri replace ";" with "+": %s' % str(args.osv_command[ii-2: ii+1]))
+            args.osv_command[ii] = arg2.replace(';tcp', '+tcp');
+    log.info('final args.osv_command: %s' % str(args.osv_command))
+
+    return args
+
 
 def get_network_param():
     log = logging.getLogger(__name__)
@@ -74,6 +118,7 @@ def get_network_param():
     net_dns = settings.OSV_NS
     log.info('VM MAC %s, IP %s, GW %s, DNS %s', net_mac, net_ip, net_gw, net_dns)
     return net_mac, net_ip, net_gw, net_dns
+
 
 def main():
     log = logging.getLogger(__name__)
