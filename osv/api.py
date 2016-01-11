@@ -232,7 +232,15 @@ class File(BaseApi):
                 subdir_name = entry['pathSuffix']
                 if subdir_name in ['.', '..']:
                     continue
-                log.debug('Recurse in dir %s/%s', path, subdir_name)
+                if path == '/' and subdir_name in ['dev', 'proc']:
+                    # do not 'download' /dev/urandom etc
+                    dev_dir =  os.path.join(dest, subdir_name)
+                    if os.path.exists(dev_dir):
+                        os.removedirs(dev_dir)
+                    log.info('Only mkdir %s on destination side', dev_dir)
+                    os.mkdir(dev_dir)
+                    continue
+                log.debug('Recurse in dir %s', os.path.join(path, subdir_name))
                 self.get_dir(os.path.join(path, subdir_name), os.path.join(dest, subdir_name))
             elif entry['type'] == 'FILE':
                 file_name = entry['pathSuffix']
