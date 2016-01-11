@@ -301,6 +301,8 @@ class VM:
     # update child_cmdline_up when cmd prompt found
     def read_std(self):
         log = logging.getLogger(__name__)
+        if not self._child_stdout or not self._child_stderr:
+            return ['', '']
         out = self._child_stdout.read()
         err = self._child_stderr.read()
         if not self._child_cmdline_up or not self._ip:
