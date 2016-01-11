@@ -77,8 +77,8 @@ def parse_args():
         arg2 = args.osv_command[ii]
         log.debug('ii=%d arg0 %s', ii, arg0)
         if arg0 == '-mca' and arg1 == 'orte_hnp_uri' and (';tcp' in arg2):
-            log.info('args.osv_command orte_hnp_uri replace ";" with "+": %s' % str(args.osv_command[ii-2: ii+1]))
-            args.osv_command[ii] = arg2.replace(';tcp', '+tcp');
+            log.info('args.osv_command orte_hnp_uri add quote to %s' % str(args.osv_command[ii-2: ii+1]))
+            args.osv_command[ii] = '"' + arg2 + '"'
     log.info('final args.osv_command: %s' % str(args.osv_command))
 
     return args
