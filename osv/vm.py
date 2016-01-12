@@ -107,6 +107,13 @@ class VMParam:
             self._net_mac = ''
         log.info('VM MAC %s', self._net_mac)
 
+    def remove_image_copy(self):
+        log = logging.getLogger(__name__)
+        if self._use_image_copy:
+            if self._in_use_image != self._image_orig:
+                log.info("Remove image copy %s", self._in_use_image)
+                os.remove(self._in_use_image)
+
     def _build_run_command(self):
         log = logging.getLogger(__name__)
         arg = ['./scripts/run.py']
@@ -296,6 +303,7 @@ class VM:
                 self._child_stdout.close()
             if self._child_stderr:
                 self._child_stderr.close()
+        self._param.remove_image_copy()
 
     # read stdout, stderr
     # update child_cmdline_up when cmd prompt found
