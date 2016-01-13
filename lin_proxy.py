@@ -16,12 +16,14 @@ import conf.settings as settings
 def copy_env(vm):
     """
     Copy all environment variables of current process to OSv container.
+    Ignore variables without value (like SELINUX_LEVEL_REQUESTED on fedora) - http PUT would fail.
     """
     log = logging.getLogger(__name__)
     for name in environ.keys():
         value = str(environ.get(name))
         ## log.info('Env %s = %s', name, value)
-        vm.env(name).set(value)
+        if(value):
+            vm.env(name).set(value)
 
 
 def parse_args___v0():
@@ -153,8 +155,10 @@ def main():
     sys.stdout.write(aa)
     sys.stdout.flush()
 
-    # Setup environ. orted already setup our env - copy it to VM. Then add additional env vars added by user.
-    copy_env(vm)
+    # copy_env is not needed any more
+    # Now lin_proxy.py starts VM with orted.so, and orted.so will set up OpenMPI related env vars.
+    # copy_env(vm)
+    # Add additional env vars added by user (those required by the OpenFOAM app).
     for env_var in args.env:
         name, value = env_var.split('=', 1)
         vm.env(name).set(value)
