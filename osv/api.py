@@ -176,7 +176,7 @@ class Os(BaseApi):
     # VM only prints  'Powering off.' to terminal
     def shutdown(self):
         log = logging.getLogger(__name__)
-        log.info('http shutdown VM child pid %d', self.vm._child.pid)
+        log.info('http shutdown VM %s', self.vm._log_name())
         try:
             self.http_post(path_extra='shutdown', timeout=_magic_timeout())
         # TODO what is wrong with that - import in __init__.py, or in tests ?
