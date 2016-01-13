@@ -1,6 +1,7 @@
 __author__ = 'justin_cinkelj'
 
 import logging
+import os
 
 """
 IP in subnet 'OSV_IP_SUBNET/OSV_IP_MASK' will be used.
@@ -17,7 +18,10 @@ OSV_VM_REDIRECT_STDIO = True
 
 # Where is source code (./scripts/run.py)
 OSV_SRC = '/opt/osv/'
-OSV_WORK_DIR = '/tmp/osv-work'
+# /tmp/** and /var/tmp/** might be forbidded in default libvirtd apparmor profile, so don't use them.
+## OSV_WORK_DIR = '/tmp/osv-work'  # apparmor problem
+## OSV_WORK_DIR = '/osv-work'  # requires sudo mkdir /osv-work; sudo chmod 777 /osv-work;
+OSV_WORK_DIR = os.environ['HOME'] + '/osv-work'  # can be auto-generated
 
 # logging
 LOG_FILE = '/tmp/orted_lin_proxy.log'

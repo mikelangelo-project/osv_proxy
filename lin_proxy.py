@@ -124,6 +124,8 @@ def main():
     log = logging.getLogger(__name__)
     if not os.path.isdir(settings.OSV_WORK_DIR):
         os.mkdir(settings.OSV_WORK_DIR)
+        # others need write perm (libvirt, kvm)
+        os.chmod(settings.OSV_WORK_DIR, 0777)
     args = parse_args()
     #
     # run new VM
