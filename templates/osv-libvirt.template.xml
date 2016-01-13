@@ -1,0 +1,44 @@
+<domain type='kvm'>
+  <name>{{ vm.name }}</name>
+  <memory unit='MiB'>{{ vm.memory }}</memory>
+  <!-- <vcpu placement='static'>{{ vm.vcpu_count }}</vcpu> -->
+  <os>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+  <cpu mode='host-passthrough'></cpu>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
+
+  <devices>
+    <emulator>/usr/bin/kvm-spice</emulator>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='qcow2' cache='{{ vm.image_cache }}' io='native'/>
+      <source dev='{{ vm.image_file }}'/>
+      <backingStore/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+
+    <interface type='bridge'>
+      <mac address='{{ vm.net_mac }}'/>
+      <source bridge='{{ vm.net_bridge }}'/>
+      <model type='virtio'/>
+    </interface>
+
+    <console type='file'>
+      <source path='{{ vm.console_log }}'/>
+      <target type='serial' port='0'/>
+    </console>
+    <graphics type='vnc' autoport='yes' listen='0.0.0.0'>
+      <listen type='address' address='0.0.0.0'/>
+    </graphics>
+  </devices>
+</domain>
+

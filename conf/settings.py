@@ -17,6 +17,7 @@ OSV_VM_REDIRECT_STDIO = True
 
 # Where is source code (./scripts/run.py)
 OSV_SRC = '/opt/osv/'
+OSV_WORK_DIR = '/tmp/osv-work'
 
 # logging
 LOG_FILE = '/tmp/orted_lin_proxy.log'
@@ -29,3 +30,4 @@ from local_settings import *
 # Ugly and bad?
 import osv.settings
 osv.settings.OSV_SRC = OSV_SRC
+osv.settings.OSV_WORK_DIR = OSV_WORK_DIR

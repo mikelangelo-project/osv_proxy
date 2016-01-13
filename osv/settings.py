@@ -8,3 +8,5 @@ OSV_SRC = '/opt/osv-src'
 OSV_BRIDGE = 'virbr0'
 OSV_CLI_APP = '/cli/cli.so'  # path to cli app inside OSv containers
 OSV_API_PORT = 8000
+
+OSV_WORK_DIR = '/tmp/osv-work'

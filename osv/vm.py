@@ -5,12 +5,14 @@ import os
 import math
 from uuid import uuid4
 import settings
-from subprocess import Popen
+from subprocess import Popen, check_call
 from time import sleep
 from random import randint
 import pipes
 import shutil
 import sys
+import libvirt
+from jinja2 import Environment, PackageLoader
 
 
 # for '192.168.1.2/24' return '192.168.1.2' and '255.255.255.0'
@@ -30,6 +32,9 @@ class VMParam:
     NET_DHCP = 'dhcp'
     NET_NONE = 'net-none'
 
+    '''
+    Save parameters. Also create copy of VM image for this particular VM.
+    '''
     def __init__(self,
                  command='',
                  image='',
@@ -62,7 +67,9 @@ class VMParam:
                 extra = []
         assert(isinstance(extra, list))
         self._extra = extra  # args to blindly pass-trough to run.py
+        self._vm_name = 'osv-%09d' % randint(0, 1e9)
         self._command = command
+        self._full_command_line = ''
         self._cpus = cpus
         self._memory = memory
         self._debug = debug
@@ -75,8 +82,9 @@ class VMParam:
             self._image_orig = 'build/%s/usr.img' % mode
         self._use_image_copy = use_image_copy
         if self._use_image_copy:
-            # TODO tmp is accessible to all, use /var/lib/somedir
-            self._in_use_image = '/tmp/osv-%09d-usr.img' % randint(0, 1e9)
+            # Put image to directory owned by current user.
+            # Image will be later owned by root, and we still have to remove it.
+            self._in_use_image = '%s/%s-usr.img' % (settings.OSV_WORK_DIR, self._vm_name)
             image_orig_full = os.path.abspath(os.path.join(settings.OSV_SRC, self._image_orig))
             log.info('Copy image %s -> %s', image_orig_full, self._in_use_image)
             shutil.copy(image_orig_full, self._in_use_image)
@@ -112,8 +120,17 @@ class VMParam:
         if self._use_image_copy:
             if self._in_use_image != self._image_orig:
                 log.info("Remove image copy %s", self._in_use_image)
-                os.remove(self._in_use_image)
+                # image file is now owned by root, or libvirt or whoever user
+                # os.remove works if we own directory
+                try:
+                    os.remove(self._in_use_image)
+                except Exception as ex:
+                    log.info('Image %s remove failed (msg: %s)', self._in_use_image, ex.get_error_message())
 
+    '''
+    Build command for run.py.
+    The full command line for OSv VM (including network settings) is stored in _full_command_line.
+    '''
     def _build_run_command(self):
         log = logging.getLogger(__name__)
         arg = ['./scripts/run.py']
@@ -183,9 +200,12 @@ class VMParam:
                 full_command = '%s %s' % (cmd_net, settings.OSV_CLI_APP)
         elif self._command:
             full_command = self._command
+        else:
+            full_command =  settings.OSV_CLI_APP
         if full_command:
             #arg.extend(['-e', pipes.quote(full_command)])
             arg.extend(['-e', full_command])
+        self._full_command_line = full_command
 
         return arg
 
@@ -199,120 +219,134 @@ class VM:
         self._param = VMParam(**kwargs)
 
         # other vars
-        self._child = None
         self._child_cmdline_up = False
-        self._child_stdout = None
-        self._child_stderr = None
         self._ip = ''
         self._api_up = False  # set by first API call
 
+        # libvirt
+        self._vm = None
+        self._console_log = ''
+        self._console_log_fd = None
+
+    def _log_name(self):
+        if self._vm:
+            name = 'vm=%s' % self._vm.name()
+        else:
+            name = 'vm=None'
+        return name
+
     @classmethod
-    def connect_to_existing(cls, ip):
+    def connect_to_existing(cls, ip, name=''):
         vm = VM()
         vm._ip = ip.split('/')[0]  # ip with or without netmask
+        if(name):
+            conn = VM._libvirt_conn()
+            #conn = libvirt.open("qemu+ssh://root@192.168.122.11/system")
+            vm._vm = conn.lookupByName(name)
         return vm
 
+    @classmethod
+    def _libvirt_conn(cls):
+        conn = libvirt.open("qemu:///system")
+        return conn
+
+    # use libvirt to start OSv VM
     def run(self, wait_up=False, redirect_stdio=True):
-        log = logging.getLogger(__name__)
-        arg = ['/usr/bin/sudo']
+        # get full_command_line
         run_arg = self._param._build_run_command()
-        run_arg[0] = os.path.join(settings.OSV_SRC, run_arg[0])  # convert rel to abs path ('./scripts/run.py')
-        arg.extend(run_arg)
-        arg_str = ' '.join(arg)
-        log.info('Running child with command %s', arg_str)
-        log.info('Running child with command %s', arg)
+        full_command_line = self._param._full_command_line
+        # image edit.
+        cmd = [os.path.join(settings.OSV_SRC, 'scripts/imgedit.py'), 'setargs', self._param._in_use_image, full_command_line]
+        print 'Set cmd: %s' % ' '.join(cmd)
+        check_call(cmd)
 
-        if redirect_stdio:
-            pid = os.getpid()
-            id = str(uuid4())[:8]
-            tmpl = '/tmp/osv-%d-%s' % (pid, id)
-            # Use /dev/null for stdin, so that VM will not steal input intended for ipython
-            fin = open('/dev/zero', 'r')
-            fout = open(tmpl + '-stdout.log', 'w', buffering=1)
-            ferr = open(tmpl + '-stderr.log', 'w', buffering=1)
-            log.info('OSv output redirected to %s-[stdout,stderr}.log', tmpl)
-            print 'OSv output redirected to %s-[stdout,stderr}.log' % tmpl
-            sys.stdout.flush()
-            fout.write('Running command:\n')
-            fout.write(arg_str + '\n')
-            fout.write(str(self._param._build_run_command())+ '\n')
-            fout.write('\n')
-            self._child_stdout = open(tmpl + '-stdout.log')
-            self._child_stderr = open(tmpl + '-stderr.log')
+        name = str(uuid4())[:8]
+        cache_mode = 'unsafe'
+        self._console_log = '%s/%s-console.log' % (settings.OSV_WORK_DIR, self._param._vm_name)
+        vm_param = {'name': self._param._vm_name,
+                    'memory': self._param._memory,
+                    'vcpu_count': self._param._cpus,
+                    'image_file': self._param._in_use_image,
+                    'image_cache': cache_mode,
+                    'net_mac': self._param._net_mac,
+                    'net_bridge': settings.OSV_BRIDGE,
+                    'console_log': self._console_log,
+                    }
+        tmpl_env = Environment(loader=PackageLoader('lin_proxy', 'templates'))
+        template = tmpl_env.get_template('osv-libvirt.template.xml')
+        xml = template.render(vm=vm_param)
+        #print xml
 
-        if redirect_stdio:
-            self._child = Popen(arg, shell=False, close_fds=True, cwd=settings.OSV_SRC, stdin=fin, stdout=fout, stderr=ferr)
-        else:
-            self._child = Popen(arg, shell=False, close_fds=True, cwd=settings.OSV_SRC)
+        # make console_log file, so that we have permission to read it.
+        open(self._console_log, 'w').close()
+        conn = VM._libvirt_conn()
+        self._vm = conn.defineXML(xml)
+        self._vm.create()  # start vm
+        self._console_log_fd = open(self._console_log)
 
-        self._child_cmdline_up = False
-        log.info('Running child pid=%d', self._child.pid)
         if self._param._net_mode == VMParam.NET_STATIC:
             self._ip = self._param._net_ip.split('/')[0]
+        aa = ''
         if wait_up:
-            self.wait_up()
-
+            aa = self.wait_up()
+        return aa
 
     def is_up(self):
         """
         Is VM still up, or did it already exit (kill to qemu, main app terminated)?
         """
-        if self._child:
-            poll_ret = self._child.poll()
-            if poll_ret is None:
-                # no exit code for child, it must be up
-                return True
+        if self._vm:
+            return self._vm.isActive()
         return False
 
-
     def terminate(self):
-        # shutdown via rest api ?
         log = logging.getLogger(__name__)
-        if self._child:
-            log.info('Terminating child pid=%d', self._child.pid)
-            poll_ret = self._child.poll()
-            if poll_ret or poll_ret == 0:
+        if self._vm:
+            log.info('Terminating libvirt vm %s', self._vm.name())
+            if not self._vm.isActive():
                 # Invalid param, run.py reported error.
                 # Or normal termintaino of app started via command.
-                log.info('Child pid=%d already terminated, exit code %d', self._child.pid, poll_ret)
+                log.info('VM %s already terminated', self._vm.name())
             else:
                 self.os().shutdown()
                 # check
                 ii = 10.0
                 while ii>0:
-                    poll_ret = self._child.poll()
-                    if poll_ret or poll_ret == 0:
-                        log.info('Child pid=%d terminated, exit code %d', self._child.pid, poll_ret)
+                    if not self._vm.isActive():
+                        log.info('VM %s terminated', self._vm.name())
                         break
                     else:
                         # poll_ret is None
-                        log.info('Child pid=%d still alive', self._child.pid)
+                        log.info('VM %s still alive', self._vm.name())
                         sleep(0.5)
                         ii -= 0.5
                 return
-                '''
-                # self._child.terminate()  # kills run.py, but not qemu-system-x86_64
-                # communicate will deadlock if Vm is not fully up yet ('exit' will be lost)
-                self.wait_cmd_prompt()
-                log.debug('child pid=%d typing exit', self._child.pid)
-                self._child.communicate('\nexit\n')  # type exit in VM
-                '''
-            self._child = None
-            self._child_cmdline_up = False
-            if self._child_stdout:
-                self._child_stdout.close()
-            if self._child_stderr:
-                self._child_stderr.close()
+            try:
+                if self._vm.isActive():
+                    self._vm.destroy()
+                sys.stdout.flush()
+            except libvirt.libvirtError as ex:
+                log.info('VM %s destroy failed: %s', self._log_name(), ex.get_error_message())
+            try:
+                self._vm.undefine()
+                sys.stdout.flush()
+            except libvirt.libvirtError as ex:
+                log.info('VM %s destroy/undefine failed: %s', self._log_name(), ex.get_error_message())
+            self._vm = None
+        sys.stdout.flush()
+        if self._console_log_fd:
+            self._console_log_fd.close()
+            self._console_log_fd = None
         self._param.remove_image_copy()
+        # the console log file is left
 
     # read stdout, stderr
     # update child_cmdline_up when cmd prompt found
     def read_std(self):
         log = logging.getLogger(__name__)
-        if not self._child_stdout or not self._child_stderr:
-            return ['', '']
-        out = self._child_stdout.read()
-        err = self._child_stderr.read()
+        if not self._console_log_fd:
+            return ''
+        out = self._console_log_fd.read()
         if not self._child_cmdline_up or not self._ip:
             for cur_line in out.split('\r\n'):
                 if not self._child_cmdline_up:
@@ -322,7 +356,7 @@ class VM:
                     or 'random' garbage can be prepend ('ESC[6n/# ')
                     '''
                     if cur_line[:3] =='/# ' or cur_line[-3:] == '/# ':
-                        log.info('child pid=%d cmd_prompt is up', self._child.pid)
+                        log.info('child %s cmd_prompt is up', self._log_name())
                         self._child_cmdline_up = True
                 if not self._ip:
                     # Is IP assigned ? Search for 'eth0: $IP'
@@ -331,66 +365,84 @@ class VM:
                     ss = 'eth0: '
                     ss_ignore = 'eth0: ethernet address:'
                     if 0 == cur_line.find(ss_ignore):
-                        log.debug('child pid=%d eth0 ignore line, %s', self._child.pid, cur_line)
+                        log.debug('child %s eth0 ignore line, %s', self._log_name(), cur_line)
                         pass
                     elif 0 == cur_line.find(ss):
-                        log.debug('child pid=%d eth0 IP found, %s', self._child.pid, cur_line)
+                        log.debug('child %s eth0 IP found, %s', self._log_name(), cur_line)
                         self._ip = cur_line.split(' ')[1]
-                        log.info('child pid=%d IP via DHCP, %s', self._child.pid, self._ip)
-        return [out, err]
+                        log.info('child %s IP via DHCP, %s', self._log_name(), self._ip)
+        return out
 
     # will eat stdout/err
     # File pos could be reset to orig value.
     # Meaningful only for default cli.so app.
     def wait_cmd_prompt(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
+        aa = ''
         if self._param._command and self._param._command.find(settings.OSV_CLI_APP) == -1:
-            log.debug('child pid=%d cmd_prompt shows up only with cli.so app', self._child.pid)
-            return False
+            log.debug('child %s cmd_prompt shows up only with cli.so app', self._log_name())
+            return False, aa
         if self._child_cmdline_up:
-            return True
+            return True, aa
 
-        if not self._child_stdout:
-            log.debug('child pid=%d stdio/err is not redirected, so just wait for 3s delay', self._child.pid)
+        if not self._console_log_fd:
+            log.debug('child %s stdio/err is not redirected, so just wait for 3s delay', self._log_name())
             sleep(3)
             self._child_cmdline_up = True
-            return True
+            return True, aa
 
         iimax = math.ceil(float(Td) / Td2)
         ii = 0
         while ii < iimax:
-            [aa, bb] = self.read_std()
+            aa2 = self.read_std()
+            aa += aa2
             if self._child_cmdline_up:
-                return True
-            log.debug('child pid=%d cmd_prompt not up yet', self._child.pid)
+                return True, aa
+            log.debug('child %s cmd_prompt not up yet', self._log_name())
             sleep(Td2)
             ii += 1
-        return False
+        return False, aa
 
     def wait_ip(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
+        aa = ''
         if self._ip:
             # DHCP IP already found, or static IP set in .run())
-            return True
+            return True, aa
 
-        if not self._child_stdout:
-            log.error('child pid=%d stdio/err is not redirected, IP will never be found', self._child.pid)
-            return False
+        if not self._console_log_fd:
+            log.error('child %s stdio/err is not redirected, IP will never be found', self._log_name())
+            return False, aa
 
         iimax = math.ceil(float(Td) / Td2)
         ii = 0
         while ii < iimax:
-            [aa, bb] = self.read_std()
+            aa2 = self.read_std()
+            aa += aa2
             if self._ip:
-                return True
-            log.debug('child pid=%d ip not up yet', self._child.pid)
+                return True, aa
+            log.debug('child %s ip not up yet', self._log_name())
             sleep(Td2)
             ii += 1
-        return False
+        return False, aa
 
     def wait_up(self, Td = 5, Td2 = 0.1):
-        self.wait_ip(Td, Td2)
-        self.wait_cmd_prompt(Td, Td2)
+        log = logging.getLogger(__name__)
+        aa = ''
+        if self._vm:
+            iimax = math.ceil(float(Td) / Td2)
+            ii = 0
+            while ii < iimax:
+                if self._vm.isActive():
+                    break
+                log.debug('child %s ip not up yet', self._log_name())
+                sleep(Td2)
+                ii += 1
+            ip_found, aa2 = self.wait_ip(Td, Td2)
+            aa += aa2
+            cmd_found, aa2 = self.wait_cmd_prompt(Td, Td2)
+            aa += aa2
+        return aa
 
     def app(self, name):
         # circular dependency import

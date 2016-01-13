@@ -20,7 +20,7 @@ def copy_env(vm):
     log = logging.getLogger(__name__)
     for name in environ.keys():
         value = str(environ.get(name))
-        log.info('Env %s = %s', name, value)
+        ## log.info('Env %s = %s', name, value)
         vm.env(name).set(value)
 
 
@@ -122,6 +122,8 @@ def get_network_param():
 
 def main():
     log = logging.getLogger(__name__)
+    if not os.path.isdir(settings.OSV_WORK_DIR):
+        os.mkdir(settings.OSV_WORK_DIR)
     args = parse_args()
     #
     # run new VM
@@ -132,19 +134,22 @@ def main():
     # gdb_port = randint(10000, 20000) # enable gdb at rand port
 
     osv_command = ' '.join(args.osv_command)
-    args_extra = ''
+    args_extra = []
     if args.unsafe_cache:
-        args_extra += '--unsafe-cache'
+        args_extra.append('--unsafe-cache')
 
     vm = VM(debug=True,
             image=args.image,
             command='',
             memory=args.memory,
             use_image_copy=True,
-            net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
+            # net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,  # static IP
+            net_mac=net_mac,  # get IP via DHCP
             gdb_port=gdb_port,
             extra=args_extra)
-    vm.run(wait_up=True, redirect_stdio=settings.OSV_VM_REDIRECT_STDIO)
+    aa = vm.run(wait_up=True, redirect_stdio=settings.OSV_VM_REDIRECT_STDIO)
+    sys.stdout.write(aa)
+    sys.stdout.flush()
 
     # Setup environ. orted already setup our env - copy it to VM. Then add additional env vars added by user.
     copy_env(vm)
@@ -159,20 +164,19 @@ def main():
 
     # shutdown
     # TODO Exit when osv_command finishes. Can that be detected via api?
-    magic_file = '/tmp/lin_proxy-%d' % os.getpid()
-    if os.path.exists(magic_file):
-        os.remove(magic_file)
     ii = 0
     while ii >= 0:
         if ii%100 == 0:
-            log.info('lin_proxy wait on   touch %s  ', magic_file)
-        if os.path.exists(magic_file):
-            break
+            log.info('lin_proxy wait on vm terminate')
         if not vm.is_up():
+            log.info('lin_proxy VM not up')
             break
+        aa = vm.read_std()
+        sys.stdout.write(aa)
+        sys.stdout.flush()
         ii += 1
         sleep(0.1)
-    log.info('lin_proxy DONE %s', magic_file)
+    log.info('lin_proxy DONE')
     vm.terminate()
     sleep(1)
 

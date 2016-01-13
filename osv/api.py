@@ -46,11 +46,12 @@ class BaseApi:
                 try:
                     # dummy request, just to wait on service up
                     uri = 'http://%s:%d' % (self.vm._ip, settings.OSV_API_PORT)
-                    resp = requests.get(uri + '/os/uptime')
+                    uri += '/os/uptime'
+                    resp = requests.get(uri)
                     self.vm._api_up = True
                     return
                 except requests.exceptions.ConnectionError:
-                    log.debug('API wait_up requests.exceptions.ConnectionError %d/%d', ii, iimax)
+                    log.debug('API wait_up requests.exceptions.ConnectionError %d/%d, uri %s', ii, iimax, uri)
                     sleep(0.1)
 
     def uri(self):
@@ -74,7 +75,7 @@ class BaseApi:
         url_all = self.uri() + path_extra
         if params:
             url_all += '?' + urlencode(params)
-        log.debug('http_post %s, data "%s"', url_all, str(data))
+        ## log.debug('http_post %s, data "%s"', url_all, str(data))
         resp = requests.post(url_all, data, **kwargs)
         if resp.status_code != 200:
             raise ApiResponseError('HTTP call failed', resp)
