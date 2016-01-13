@@ -18,9 +18,13 @@
   </pm>
 
   <devices>
-    <emulator>/usr/bin/kvm-spice</emulator>
+    <!--
+      Ubuntu - /usr/bin/kvm-spice, Fedora - /usr/bin/qemu-kvm.
+      Without expocit value, seems that accel=kvm is still set.
+    -->
+    <!-- <emulator>/usr/bin/kvm-spice</emulator> -->
     <disk type='block' device='disk'>
-      <driver name='qemu' type='qcow2' cache='{{ vm.image_cache }}' io='native'/>
+      <driver name='qemu' type='qcow2' cache='{{ vm.image_cache_mode }}' io='{{ vm.image_io_mode}}'/>
       <source dev='{{ vm.image_file }}'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>

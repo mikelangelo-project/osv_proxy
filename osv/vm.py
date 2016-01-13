@@ -261,13 +261,21 @@ class VM:
         check_call(cmd)
 
         name = str(uuid4())[:8]
-        cache_mode = 'unsafe'
+        # what are valid cache/io mode combinations
+        #   none + native, not available on all hosts/filesystems (err: file system may not support O_DIRECT)
+        #   unsafe + native - rejected by libvirt, err: unsupported configuration: native I/O needs either no disk cache or directsync cache mode, QEMU will fallback to aio=threads
+        #   unsafe + threads - is ok
+        image_cache_mode, image_io_mode = 'none', 'native'
+        #image_cache_mode, image_io_mode = 'unsafe', 'threads'  # ok
+
+        image_cache_mode, image_io_mode = 'unsafe', 'threads'  # ok
         self._console_log = '%s/%s-console.log' % (settings.OSV_WORK_DIR, self._param._vm_name)
         vm_param = {'name': self._param._vm_name,
                     'memory': self._param._memory,
                     'vcpu_count': self._param._cpus,
                     'image_file': self._param._in_use_image,
-                    'image_cache': cache_mode,
+                    'image_cache_mode': image_cache_mode,
+                    'image_io_mode': image_io_mode,
                     'net_mac': self._param._net_mac,
                     'net_bridge': settings.OSV_BRIDGE,
                     'console_log': self._console_log,
