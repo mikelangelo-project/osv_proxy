@@ -1,4 +1,12 @@
-<domain type='kvm'>
+<domain type='kvm'  xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <!-- append "-gdb tcp::1234,server,nowait" to end of qemu commandline -->
+  <!--
+  <qemu:commandline>
+    <qemu:arg value='-gdb'/>
+    <qemu:arg value='tcp::1234,server,nowait'/>
+  </qemu:commandline>
+  -->
+
   <name>{{ vm.name }}</name>
   <memory unit='MiB'>{{ vm.memory }}</memory>
   <!-- <vcpu placement='static'>{{ vm.vcpu_count }}</vcpu> -->
