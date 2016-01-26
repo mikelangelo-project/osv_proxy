@@ -57,6 +57,11 @@ def parse_args():
     args.env = []
     args.env = ['MPI_BUFFER_SIZE=2100100', 'TERM=xterm']
 
+    args.memory = 3024
+    args.env = ['MPI_BUFFER_SIZE=2100100', 'TERM=xterm', 'WM_PROJECT_DIR=/openfoam']
+    #args.env.append('OPAL_dss_debug=1')
+    #args.image = settings.OSV_SRC + '/build/release/usr.img'
+
     # args.osv_command = '/usr/lib/orted.so /usr/lib/mpi_hello.so'.split()  # list of strings
     args.osv_command = deepcopy(sys.argv)
     log.info('sys.argv: %s' % str(sys.argv))
@@ -82,6 +87,7 @@ def parse_args():
             log.info('args.osv_command orte_hnp_uri add quote to %s' % str(args.osv_command[ii-2: ii+1]))
             args.osv_command[ii] = '"' + arg2 + '"'
     log.info('final args.osv_command: %s' % str(args.osv_command))
+    print 'Using image: ' + args.image  # so that I won't forget again if I'm usig debug or release build
 
     return args
 
@@ -146,6 +152,7 @@ def main():
             image=args.image,
             command='',
             memory=args.memory,
+            cpus=4,
             use_image_copy=True,
             # net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,  # static IP
             net_mac=net_mac,  # get IP via DHCP
