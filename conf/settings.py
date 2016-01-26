@@ -27,11 +27,16 @@ OSV_WORK_DIR = os.environ['HOME'] + '/osv-work'  # can be auto-generated
 LOG_FILE = '/tmp/orted_lin_proxy.log'
 LOG_LEVEL = logging.DEBUG
 
+# Import OSV_* variables from osv.setting, then override them in local_settings
+# OSV_SRC, OSV_BRIDGE, OSV_CLI_APP, OSV_API_PORT, OSV_WORK_DIR
+from osv.settings import *
+
 # update values
 from local_settings import *
 
 # osv.settings.OSV_SRC is separate var, update the value.
 # Ugly and bad?
 import osv.settings
-osv.settings.OSV_SRC = OSV_SRC
-osv.settings.OSV_WORK_DIR = OSV_WORK_DIR
+for name in osv.settings.__dict__:
+    if name.startswith('OSV_'):
+        osv.settings.__dict__[name] = globals()[name]
