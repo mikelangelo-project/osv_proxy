@@ -9,7 +9,7 @@
 
   <name>{{ vm.name }}</name>
   <memory unit='MiB'>{{ vm.memory }}</memory>
-  <!-- <vcpu placement='static'>{{ vm.vcpu_count }}</vcpu> -->
+  <vcpu placement='static'>{{ vm.vcpu_count }}</vcpu>
   <os>
     <type arch='x86_64'>hvm</type>
     <boot dev='hd'/>
