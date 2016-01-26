@@ -255,6 +255,7 @@ class VM:
         # get full_command_line
         run_arg = self._param._build_run_command()
         full_command_line = self._param._full_command_line
+        ## full_command_line = '--verbose ' + full_command_line  # run OSv VM in verbose mode
         # image edit.
         cmd = [os.path.join(settings.OSV_SRC, 'scripts/imgedit.py'), 'setargs', self._param._in_use_image, full_command_line]
         print 'Set cmd: %s' % ' '.join(cmd)
