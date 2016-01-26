@@ -16,13 +16,6 @@ OSV_NS = '192.168.122.1'
 
 OSV_VM_REDIRECT_STDIO = True
 
-# Where is source code (./scripts/run.py)
-OSV_SRC = '/opt/osv/'
-# /tmp/** and /var/tmp/** might be forbidded in default libvirtd apparmor profile, so don't use them.
-## OSV_WORK_DIR = '/tmp/osv-work'  # apparmor problem
-## OSV_WORK_DIR = '/osv-work'  # requires sudo mkdir /osv-work; sudo chmod 777 /osv-work;
-OSV_WORK_DIR = os.environ['HOME'] + '/osv-work'  # can be auto-generated
-
 # logging
 LOG_FILE = '/tmp/orted_lin_proxy.log'
 LOG_LEVEL = logging.DEBUG
