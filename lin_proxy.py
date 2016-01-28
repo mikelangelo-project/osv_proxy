@@ -6,7 +6,7 @@ import logging
 import logging.config
 from time import sleep
 from os import environ
-from osv import VM, Env
+from osv import VM, Env, VMParam
 from random import randint
 import argparse
 from copy import deepcopy
@@ -115,6 +115,12 @@ def main():
     # unsafe-cache for NFS mount
 
     net_mac, net_ip, net_gw, net_dns = get_network_param()
+    if settings.OSV_IP_MODE == VMParam.NET_DHCP:
+        # if net_ip isn't set, DHCP will be used
+        net_ip = ''
+        net_gw = ''
+        net_dns = ''
+
     gdb_port = 0  # disable gdb
     # gdb_port = randint(10000, 20000) # enable gdb at rand port
 
@@ -125,8 +131,7 @@ def main():
             command='',
             memory=args.memory,
             use_image_copy=True,
-            # net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,  # static IP
-            net_mac=net_mac,  # get IP via DHCP
+            net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
             gdb_port=gdb_port)
     aa = vm.run(wait_up=True)
     sys.stdout.write(aa)
