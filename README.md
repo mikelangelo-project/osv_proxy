@@ -1,9 +1,10 @@
-In direcotry osv/:
+In directory osv/:
 A simple tool to run and configure OSv containers. Can set environment variables, before running application.
- 
+
 That code is used be orted proxy.
 
- * INSTALL
+# INSTALL
+
 Prepare virtualenv (ubuntu 14.04.3):
 ```
 sudo apt-get install libvirt-bin qemu-kvm
@@ -31,8 +32,11 @@ User running lin_proxy.sh should be member of libvirt and kvm group:
 ```
 usermod -a -G libvirtd,kvm SOMEONE
 ```
-** Nested virtualization
- https://fedoraproject.org/wiki/How_to_enable_nested_virtualization_in_KVM
+
+## Nested virtualization
+
+ * https://fedoraproject.org/wiki/How_to_enable_nested_virtualization_in_KVM
+
 On host, check:
 ```
 cat /sys/module/kvm_intel/parameters/nested
@@ -48,6 +52,6 @@ For VM, set:
 ```
 <cpu mode='host-passthrough'>...</cpu>
 
-# And check after shutdown/reboot:
+# And check after VM shutdown/reboot:
 ls -la /dev/kvm
 ```
