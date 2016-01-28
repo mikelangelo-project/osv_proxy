@@ -1,11 +1,11 @@
 <domain type='kvm'  xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  {% if vm.gdb_port %}
   <!-- append "-gdb tcp::1234,server,nowait" to end of qemu commandline -->
-  <!--
   <qemu:commandline>
     <qemu:arg value='-gdb'/>
-    <qemu:arg value='tcp::1234,server,nowait'/>
+    <qemu:arg value='tcp::{{ vm.gdb_port }},server,nowait'/>
   </qemu:commandline>
-  -->
+  {% endif %}
 
   <name>{{ vm.name }}</name>
   <memory unit='MiB'>{{ vm.memory }}</memory>

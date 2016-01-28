@@ -26,25 +26,6 @@ def copy_env(vm):
             vm.env(name).set(value)
 
 
-def parse_args___v0():
-    log = logging.getLogger(__name__)
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-i', '--image', default='',
-                       help='path to OSv image')
-    parser.add_argument('-m', '--memory', default=512,
-                       help='VM memory in MB')
-    parser.add_argument('--env', default=[], metavar='NAME=VALUE', action='append',
-                       help='additional environ variables for OSv')
-    parser.add_argument('-u', '--unsafe-cache', action='store_true',
-                       help='Set cache to unsafe.')
-    parser.add_argument('osv_command', nargs=argparse.REMAINDER,
-                   help='Application to start in VM (path and arguments)')
-    args = parser.parse_args()
-    log.info('Cmdline args: %s' % str(args))
-    return args
-
-
-# if we are called as mpirun --lanuch-agent - e.g. instead of real orted.
 def parse_args():
     log = logging.getLogger(__name__)
     class Args:
@@ -138,9 +119,6 @@ def main():
     # gdb_port = randint(10000, 20000) # enable gdb at rand port
 
     osv_command = ' '.join(args.osv_command)
-    args_extra = []
-    if args.unsafe_cache:
-        args_extra.append('--unsafe-cache')
 
     vm = VM(debug=True,
             image=args.image,
@@ -149,8 +127,7 @@ def main():
             use_image_copy=True,
             # net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,  # static IP
             net_mac=net_mac,  # get IP via DHCP
-            gdb_port=gdb_port,
-            extra=args_extra)
+            gdb_port=gdb_port)
     aa = vm.run(wait_up=True)
     sys.stdout.write(aa)
     sys.stdout.flush()

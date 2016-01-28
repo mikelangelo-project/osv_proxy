@@ -48,25 +48,11 @@ class VMParam:
                  net_gw='',
                  net_dns='',
 
-                 vnc=False,
-                 vnc_port=0,
-                 gdb=False,
                  gdb_port=0,
                  verbose=False,
-                 debug=False,
-                 extra=[]
+                 debug=False
                  ):
         log = logging.getLogger(__name__)
-        if isinstance(extra, str):
-            # If single string is passed, interpret it as a single argument.
-            # And extra should be list.
-            if extra:
-                extra = [extra]
-            else:
-                # '' is equivalent to []
-                extra = []
-        assert(isinstance(extra, list))
-        self._extra = extra  # args to blindly pass-trough to run.py
         self._vm_name = 'osv-%09d' % randint(0, 1e9)
         self._command = command
         self._full_command_line = ''
@@ -91,10 +77,7 @@ class VMParam:
         else:
             self._in_use_image = self._image_orig
 
-        self._vnc_port = vnc_port
-        self._vnc = True if self._vnc_port else vnc
         self._gdb_port = gdb_port
-        self._gdb = True if self._gdb_port else gdb
 
         self._net_ip = net_ip
         self._net_gw = net_gw
@@ -144,29 +127,6 @@ class VMParam:
             arg.append('--verbose')
         if self._debug:
             arg.append('--debug')
-
-        if self._vnc:
-            if self._vnc_port:
-                arg.extend(['--vnc', str(self._vnc_port)])
-            else:
-                # vnc enabled by default
-                pass
-        else:
-            arg.append('--novnc')
-
-        if self._gdb:
-            if self._gdb_port:
-                arg.extend(['--gdb', str(self._gdb_port)])
-            else:
-                # gdb enabled by default
-                pass
-        else:
-            arg.append('--nogdb')
-
-        # add _extra param before command (-e '...' part)
-        if self._extra:
-            log.info('arg add _extra = "%s"', self._extra)
-            arg.extend(self._extra)
 
         cmd_net = ''
         if self._net_mode == VMParam.NET_NONE:
@@ -280,6 +240,7 @@ class VM:
                     'net_mac': self._param._net_mac,
                     'net_bridge': settings.OSV_BRIDGE,
                     'console_log': self._console_log,
+                    'gdb_port': self._param._gdb_port,
                     }
         tmpl_env = Environment(loader=PackageLoader('lin_proxy', 'templates'))
         template = tmpl_env.get_template('osv-libvirt.template.xml')
