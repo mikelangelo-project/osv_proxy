@@ -5,6 +5,19 @@ That code is used be orted proxy.
 
 # INSTALL
 
+## with script
+
+Run install.sh as user, which is supposed to run osv_proxy.py.
+If some system packages are missing, ```sudo apt-get install``` will be invoked,
+and the user will need to have sudo rights.
+
+```
+./install.sh --dry-run
+./install.sh
+```
+
+## manually
+
 Prepare virtualenv (ubuntu 14.04.3):
 ```
 sudo apt-get install libvirt-bin qemu-kvm
@@ -52,6 +65,6 @@ For VM, set:
 ```
 <cpu mode='host-passthrough'>...</cpu>
 
-# And check after VM shutdown/reboot:
+# And check after shutdown/reboot:
 ls -la /dev/kvm
 ```
