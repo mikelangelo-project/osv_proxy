@@ -14,8 +14,6 @@ OSV_IP_MASK = 24
 OSV_GW = '192.168.122.1'
 OSV_NS = '192.168.122.1'
 
-OSV_VM_REDIRECT_STDIO = True
-
 # logging
 LOG_FILE = '/tmp/orted_lin_proxy.log'
 LOG_LEVEL = logging.DEBUG

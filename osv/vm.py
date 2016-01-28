@@ -251,7 +251,7 @@ class VM:
         return conn
 
     # use libvirt to start OSv VM
-    def run(self, wait_up=False, redirect_stdio=True):
+    def run(self, wait_up=False):
         # get full_command_line
         run_arg = self._param._build_run_command()
         full_command_line = self._param._full_command_line

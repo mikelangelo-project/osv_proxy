@@ -151,7 +151,7 @@ def main():
             net_mac=net_mac,  # get IP via DHCP
             gdb_port=gdb_port,
             extra=args_extra)
-    aa = vm.run(wait_up=True, redirect_stdio=settings.OSV_VM_REDIRECT_STDIO)
+    aa = vm.run(wait_up=True)
     sys.stdout.write(aa)
     sys.stdout.flush()
 
