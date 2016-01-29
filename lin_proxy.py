@@ -10,6 +10,7 @@ from osv import VM, Env, VMParam
 from random import randint
 import argparse
 from copy import deepcopy
+import psutil
 
 import conf.settings as settings
 
@@ -33,7 +34,11 @@ def parse_args():
     args = Args()
     args.unsafe_cache = True
     args.image = settings.OSV_SRC + '/build/debug/usr.img'
-    args.memory = 1024
+
+    # just use all cpus, all memory ?
+    args.cpus = psutil.cpu_count()
+    args.memory = psutil.virtual_memory().total / (1024*1024)
+    args.memory = int( args.memory * 0.50)  # until some better idea
 
     args.env = []
     args.env = ['MPI_BUFFER_SIZE=2100100', 'TERM=xterm']
@@ -129,6 +134,7 @@ def main():
     vm = VM(debug=True,
             image=args.image,
             command='',
+            cpus=args.cpus,
             memory=args.memory,
             use_image_copy=True,
             net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
