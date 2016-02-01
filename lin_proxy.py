@@ -110,6 +110,11 @@ def get_network_param():
 
 def main():
     log = logging.getLogger(__name__)
+    # OSV_WORK_DIR - where to put VM image files and console log.
+    # /tmp/** and /var/tmp/** might be forbidded in default libvirtd apparmor profile, so don't use them.
+    ## OSV_WORK_DIR = '/tmp/osv-work'  # apparmor problem
+    ## OSV_WORK_DIR = '/osv-work'  # requires sudo mkdir /osv-work; sudo chmod 777 /osv-work;
+    ## OSV_WORK_DIR = os.environ['HOME'] + '/osv-work'  # can be auto-generated, no root rights required
     if not os.path.isdir(settings.OSV_WORK_DIR):
         os.mkdir(settings.OSV_WORK_DIR)
         # others need write perm (libvirt, kvm)
