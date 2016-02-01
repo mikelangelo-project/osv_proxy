@@ -342,9 +342,14 @@ class VM:
                         log.info('child %s IP via DHCP, %s', self._log_name(), self._ip)
         return out
 
-    # will eat stdout/err
-    # File pos could be reset to orig value.
-    # Meaningful only for default cli.so app.
+    """
+    Function will eat stdout/err (file pos could be reset to orig value, but it was not really needed so far).
+    It is meaningful only for default cli.so app.
+
+    The reason for waiting on command prompt is that it's started after detached apps (init scripts) - e.g. after http-server.
+    When command prompt shows, also http-server REST api should be fully up (but we anyway as first REST api call do a dummy
+    http GET, "just in case").
+    """
     def wait_cmd_prompt(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
         stdout_data = ''
@@ -352,12 +357,6 @@ class VM:
             log.debug('child %s cmd_prompt shows up only with cli.so app', self._log_name())
             return False, stdout_data
         if self._child_cmdline_up:
-            return True, stdout_data
-
-        if not self._console_log_fd:
-            log.debug('child %s stdio/err is not redirected, so just wait for 3s delay', self._log_name())
-            sleep(3)
-            self._child_cmdline_up = True
             return True, stdout_data
 
         iimax = math.ceil(float(Td) / Td2)
@@ -372,16 +371,16 @@ class VM:
             ii += 1
         return False, stdout_data
 
+    """
+    Wait on VM to get IP from DHCP.
+    If static IP configuration is used, return success immediately.
+    """
     def wait_ip(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
         stdout_data = ''
         if self._ip:
             # DHCP IP already found, or static IP set in .run())
             return True, stdout_data
-
-        if not self._console_log_fd:
-            log.error('child %s stdio/err is not redirected, IP will never be found', self._log_name())
-            return False, stdout_data
 
         iimax = math.ceil(float(Td) / Td2)
         ii = 0
@@ -395,6 +394,9 @@ class VM:
             ii += 1
         return False, stdout_data
 
+    """
+    Wait on VM to be fully up and operational.
+    """
     def wait_up(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
         stdout_data = ''
