@@ -278,7 +278,7 @@ class VM:
                 # Or normal termintaino of app started via command.
                 log.info('VM %s already terminated', self._vm.name())
             else:
-                self.os().shutdown()
+                self.os_api().shutdown()
                 # check
                 ii = 10.0
                 while ii>0:
@@ -414,35 +414,35 @@ class VM:
             stdout_data += stdout_data2
         return stdout_data
 
-    def app(self, name):
+    def app_api(self, name):
         # circular dependency import
         import api
-        api = api.App(self, name)
-        return api
+        api_instance = api.App(self, name)
+        return api_instance
 
-    def env(self, name=None):
+    def env_api(self, name=None):
         # circular dependency import
         import api
         if name is None:
             # all env vars
-            api = api.EnvAll(self)
-            return api
+            api_instance = api.EnvAll(self)
+            return api_instance
         else:
             # known env variable name
-            api = api.Env(self, name)
-            return api
+            api_instance = api.Env(self, name)
+            return api_instance
 
-    def os(self):
+    def os_api(self):
         # circular dependency import
         import api
-        api = api.Os(self)
-        return api
+        api_instance = api.Os(self)
+        return api_instance
 
-    def file(self):
+    def file_api(self):
         # circular dependency import
         import api
-        file = api.File(self)
-        return file
+        api_instance = api.File(self)
+        return api_instance
 
 # logging.basicConfig(level=logging.DEBUG)
 

@@ -24,7 +24,7 @@ def copy_env(vm):
         value = str(environ.get(name))
         ## log.info('Env %s = %s', name, value)
         if(value):
-            vm.env(name).set(value)
+            vm.env_api(name).set(value)
 
 
 def parse_args():
@@ -154,12 +154,12 @@ def main():
     # Add additional env vars added by user (those required by the OpenFOAM app).
     for env_var in args.env:
         name, value = env_var.split('=', 1)
-        vm.env(name).set(value)
+        vm.env_api(name).set(value)
 
     # osv_command = '/usr/lib/mpi_hello.so 192.168.122.1 8080'
     log.info('Run program %s', osv_command)
     if osv_command:
-        vm.app(osv_command).run()
+        vm.app_api(osv_command).run()
 
     # shutdown
     # TODO Exit when osv_command finishes. Can that be detected via api?
