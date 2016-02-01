@@ -62,18 +62,22 @@ class VMParam:
         self._verbose = verbose
         # image relative to OSV_SRC, or abs path
         if image:
-            self._image_orig = image
+            if os.path.isabs(image):
+                self._image_orig = image
+            else:
+                self._image_orig = os.path.abspath(os.path.join(settings.OSV_SRC, image))
         else:
             mode = 'debug' if self._debug else 'release'
-            self._image_orig = 'build/%s/usr.img' % mode
+            image_rel_path = 'build/%s/usr.img' % mode
+            self._image_orig = os.path.abspath(os.path.join(settings.OSV_SRC, image_rel_path))
+        # self._image_orig now contains abs path to image
         self._use_image_copy = use_image_copy
         if self._use_image_copy:
             # Put image to directory owned by current user.
             # Image will be later owned by root, and we still have to remove it.
             self._in_use_image = '%s/%s-usr.img' % (settings.OSV_WORK_DIR, self._vm_name)
-            image_orig_full = os.path.abspath(os.path.join(settings.OSV_SRC, self._image_orig))
-            log.info('Copy image %s -> %s', image_orig_full, self._in_use_image)
-            shutil.copy(image_orig_full, self._in_use_image)
+            log.info('Copy image %s -> %s', self._image_orig, self._in_use_image)
+            shutil.copy(self._image_orig, self._in_use_image)
         else:
             self._in_use_image = self._image_orig
 
