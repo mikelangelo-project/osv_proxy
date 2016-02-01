@@ -256,10 +256,10 @@ class VM:
 
         if self._param._net_mode == VMParam.NET_STATIC:
             self._ip = self._param._net_ip.split('/')[0]
-        aa = ''
+        stdout_data = ''
         if wait_up:
-            aa = self.wait_up()
-        return aa
+            stdout_data = self.wait_up()
+        return stdout_data
 
     def is_up(self):
         """
@@ -348,57 +348,57 @@ class VM:
     # Meaningful only for default cli.so app.
     def wait_cmd_prompt(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
-        aa = ''
+        stdout_data = ''
         if self._param._command and self._param._command.find(settings.OSV_CLI_APP) == -1:
             log.debug('child %s cmd_prompt shows up only with cli.so app', self._log_name())
-            return False, aa
+            return False, stdout_data
         if self._child_cmdline_up:
-            return True, aa
+            return True, stdout_data
 
         if not self._console_log_fd:
             log.debug('child %s stdio/err is not redirected, so just wait for 3s delay', self._log_name())
             sleep(3)
             self._child_cmdline_up = True
-            return True, aa
+            return True, stdout_data
 
         iimax = math.ceil(float(Td) / Td2)
         ii = 0
         while ii < iimax:
-            aa2 = self.read_std()
-            aa += aa2
+            stdout_data2 = self.read_std()
+            stdout_data += stdout_data2
             if self._child_cmdline_up:
-                return True, aa
+                return True, stdout_data
             log.debug('child %s cmd_prompt not up yet', self._log_name())
             sleep(Td2)
             ii += 1
-        return False, aa
+        return False, stdout_data
 
     def wait_ip(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
-        aa = ''
+        stdout_data = ''
         if self._ip:
             # DHCP IP already found, or static IP set in .run())
-            return True, aa
+            return True, stdout_data
 
         if not self._console_log_fd:
             log.error('child %s stdio/err is not redirected, IP will never be found', self._log_name())
-            return False, aa
+            return False, stdout_data
 
         iimax = math.ceil(float(Td) / Td2)
         ii = 0
         while ii < iimax:
-            aa2 = self.read_std()
-            aa += aa2
+            stdout_data2 = self.read_std()
+            stdout_data += stdout_data2
             if self._ip:
-                return True, aa
+                return True, stdout_data
             log.debug('child %s ip not up yet', self._log_name())
             sleep(Td2)
             ii += 1
-        return False, aa
+        return False, stdout_data
 
     def wait_up(self, Td = 5, Td2 = 0.1):
         log = logging.getLogger(__name__)
-        aa = ''
+        stdout_data = ''
         if self._vm:
             iimax = math.ceil(float(Td) / Td2)
             ii = 0
@@ -408,11 +408,11 @@ class VM:
                 log.debug('child %s ip not up yet', self._log_name())
                 sleep(Td2)
                 ii += 1
-            ip_found, aa2 = self.wait_ip(Td, Td2)
-            aa += aa2
-            cmd_found, aa2 = self.wait_cmd_prompt(Td, Td2)
-            aa += aa2
-        return aa
+            ip_found, stdout_data2 = self.wait_ip(Td, Td2)
+            stdout_data += stdout_data2
+            cmd_found, stdout_data2 = self.wait_cmd_prompt(Td, Td2)
+            stdout_data += stdout_data2
+        return stdout_data
 
     def app(self, name):
         # circular dependency import

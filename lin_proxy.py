@@ -144,8 +144,8 @@ def main():
             use_image_copy=True,
             net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
             gdb_port=gdb_port)
-    aa = vm.run(wait_up=True)
-    sys.stdout.write(aa)
+    stdout_data = vm.run(wait_up=True)
+    sys.stdout.write(stdout_data)
     sys.stdout.flush()
 
     # copy_env is not needed any more
@@ -170,8 +170,8 @@ def main():
         if not vm.is_up():
             log.info('lin_proxy VM not up')
             break
-        aa = vm.read_std()
-        sys.stdout.write(aa)
+        stdout_data = vm.read_std()
+        sys.stdout.write(stdout_data)
         sys.stdout.flush()
         ii += 1
         sleep(0.1)

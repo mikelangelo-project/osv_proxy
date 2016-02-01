@@ -117,8 +117,8 @@ class EnvAll(BaseApi):
         content = self.http_get(path_extra='/')
         arr1 = ast.literal_eval(content)
         arr2 = {}
-        for aa in arr1:
-            kk, vv = env_var_split(aa)
+        for kk_vv in arr1:
+            kk, vv = env_var_split(kk_vv)
             arr2[kk] = vv
         return arr2
 
