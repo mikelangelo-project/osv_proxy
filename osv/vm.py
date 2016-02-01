@@ -336,7 +336,6 @@ class VM:
                     ss_ignore = 'eth0: ethernet address:'
                     if 0 == cur_line.find(ss_ignore):
                         log.debug('child %s eth0 ignore line, %s', self._log_name(), cur_line)
-                        pass
                     elif 0 == cur_line.find(ss):
                         log.debug('child %s eth0 IP found, %s', self._log_name(), cur_line)
                         self._ip = cur_line.split(' ')[1]
