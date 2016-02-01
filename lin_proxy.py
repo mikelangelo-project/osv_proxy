@@ -46,7 +46,7 @@ def parse_args():
     # args.osv_command = '/usr/lib/orted.so /usr/lib/mpi_hello.so'.split()  # list of strings
     args.osv_command = deepcopy(sys.argv)
     log.info('sys.argv: %s' % str(sys.argv))
-    assert(args.osv_command[0].endswith('osv_proxy/lin_proxy.py'))
+    assert(args.osv_command[0].endswith('/lin_proxy.py'))
     args.osv_command[0] = '/usr/lib/orted.so'
     # remove args "-mca orte_launch_agent /home/justin_cinkelj/devel/mikelangelo/osv_proxy/lin_proxy.py"
     for ii in range(2, len(args.osv_command)):
@@ -54,7 +54,7 @@ def parse_args():
         arg1 = args.osv_command[ii-1]
         arg2 = args.osv_command[ii]
         log.debug('ii=%d arg0 %s', ii, arg0)
-        if arg0 == '-mca' and arg1 == 'orte_launch_agent' and arg2.endswith('osv_proxy/lin_proxy.py'):
+        if arg0 == '-mca' and arg1 == 'orte_launch_agent' and arg2.endswith('/lin_proxy.py'):
             log.info('args.osv_command remove: %s' % str(args.osv_command[ii-2: ii+1]))
             del args.osv_command[ii-2: ii+1]
             break  # ii is invalid now
