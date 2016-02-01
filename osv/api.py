@@ -1,6 +1,6 @@
 __author__ = 'justin_cinkelj'
 '''
-REST api to access OSv container.
+REST api to access OSv VM.
 '''
 
 from osv import VM

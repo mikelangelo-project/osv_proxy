@@ -16,7 +16,7 @@ import conf.settings as settings
 
 def copy_env(vm):
     """
-    Copy all environment variables of current process to OSv container.
+    Copy all environment variables of current process to OSv VM.
     Ignore variables without value (like SELINUX_LEVEL_REQUESTED on fedora) - http PUT would fail.
     """
     log = logging.getLogger(__name__)

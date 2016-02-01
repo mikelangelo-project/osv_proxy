@@ -172,7 +172,7 @@ class VMParam:
 
 class VM:
     """
-    Create new container.
+    Create new VM.
     net_ip is in CIDR notation 'ip/bits'
     """
     def __init__(self, **kwargs):
