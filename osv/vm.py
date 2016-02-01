@@ -39,7 +39,7 @@ class VMParam:
                  command='',
                  image='',
                  use_image_copy=False,
-                 cpus=0,
+                 cpus=1,
                  memory=512,
 
                  networking=True,
