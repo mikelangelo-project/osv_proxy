@@ -93,3 +93,7 @@ fi
 $CMDPREFIX source "$VENAME/bin/activate"
 $CMDPREFIX pip install -r "$SRCDIR/requirements-run.txt"
 
+# create empty local_settings.py
+if [ ! -f "$SRCDIR/conf/local_settings.py" ]; then
+    $CMDPREFIX cp "$SRCDIR/conf/local_settings.py.example" "$SRCDIR/conf/local_settings.py"
+fi

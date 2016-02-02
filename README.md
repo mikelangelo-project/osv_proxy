@@ -16,6 +16,8 @@ and the user will need to have sudo rights.
 ./install.sh
 ```
 
+Edit `conf/local_settings.py` to set OSV_SRC to path with OSv source code.
+
 ## manually
 
 Prepare virtualenv (ubuntu 14.04.3):
@@ -45,6 +47,8 @@ User running lin_proxy.sh should be member of libvirt and kvm group:
 ```
 usermod -a -G libvirtd,kvm SOMEONE
 ```
+
+Edit `conf/local_settings.py` to set OSV_SRC to path with OSv source code.
 
 ## Nested virtualization
 
