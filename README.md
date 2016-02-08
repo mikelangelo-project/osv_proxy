@@ -118,9 +118,32 @@ An example to run mpi_hello (for OSv compiled to shared object file named mpi_he
 mpirun -H user@host -n 2 --launch-agent /host/path/to/lin_proxy.sh /vm/path/to/mpi_hello.so
 ```
 
-The ```/host/path/to/lin_proxy.sh``` is inside host filesystem. The lin_proxy.sh binary has to be at same path on all hosts.
-The ```/vm/path/to/mpi_hello.so``` is inside VM image filesystem.
+The `/host/path/to/lin_proxy.sh` is inside host filesystem. The lin_proxy.sh binary has to be at same path on all hosts.
+The `/vm/path/to/mpi_hello.so` is inside VM image filesystem.
 
-Not that mpirun uses --launch-agent for remote hosts only. For localhost it seems to be simply ignored, so you cannot run MPI program on localhost.
+Not that mpirun uses --launch-agent for remote hosts only.
+For localhost it seems to be simply ignored.
+Using explicit address 127.0.0.2, 127.0.0.3 etc is a simple workaround.
 
 Debug informations are written to "/tmp/orted_lin_proxy.log" file, on each host used by mpirun.
+
+A more complex example:
+```
+mpirun -n 2 -H 127.0.0.2,127.0.0.3 \
+    --launch-agent \
+        "/host/path/to/lin_proxy.sh \
+        --cpus 4 --memory 1024 \
+        --bridge=virbr0 --net-ip 192.168.122.100/24 --net-mac 88:22:33:44:55:00 \
+        --nfs 'nfs://192.168.122.1/ggg/?uid=0 /fff' " \
+    -x TERM=xterm -x MPI_BUFFER_SIZE=2100100 -wd / /vm/path/to/mpi_hello.so
+```
+Here, 2 VMs are started on localhost.
+ - Note that whole `--launch-agent` parameter is enclosed in quotes.
+ - CPU count and memory are defined on commandline.
+ - Both VMs are bridge to bridge virbr0.
+ - The first one has IP `192.168.122.100/24` and MAC `88:22:33:44:55:00`.
+ - The second one has IP `192.168.122.101/24` and MAC `88:22:33:44:55:01`.
+ - Before starting mpi_hello.so, a NFS network disk is mounted to /fff directory.
+ - The `-x KEY=VALUE` are environment variables for MPI program (set by mpirun and orted.so just before starting MPI program).
+
+Run `/host/path/to/lin_proxy.sh --help` for remaining options.
