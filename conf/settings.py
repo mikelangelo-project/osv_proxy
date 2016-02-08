@@ -5,17 +5,15 @@ import os
 from osv import VMParam
 
 """
-IP in subnet 'OSV_IP_SUBNET/OSV_IP_MASK' will be used.
+IP in subnet 'OSV_IP_SUBNET/OSV_IP_PREFIX' will be used.
 Within subnet, only IPs in range OSV_IP_SUBNET+[OSV_IP_MIN, OSV_IP_MAX] will are used.
 """
 
-# NET_DHCP or NET_STATIC
-OSV_IP_MODE = VMParam.NET_DHCP
 # configuration for static IP - a random IP is picked from [OSV_IP_MIN, OSV_IP_MAX] range
 OSV_IP_SUBNET = '192.168.122.0'
 OSV_IP_MIN = 200
 OSV_IP_MAX = 250
-OSV_IP_MASK = 24
+OSV_IP_PREFIX = 24
 OSV_GW = '192.168.122.1'
 OSV_NS = '192.168.122.1'
 

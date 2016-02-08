@@ -16,6 +16,62 @@ import shlex
 import conf.settings as settings
 
 
+'''
+mac_addr is string like '11:22:33:44:55:F0'.
+offset is int, and sum of both is returned.
+  '11:22:33:44:55:F0' +  8 = '11:22:33:44:55:F8'
+  '11:22:33:44:55:F0' + 18 = '11:22:33:44:56:02'
+'''
+def mac_address_add(mac_addr, offset):
+    # convert hex string to large int
+    mac_part_str = mac_addr.split(':')
+    mac_part_int = [int(st, 16) for st in mac_part_str]
+    mac_int = 0
+    for ii in range(6):
+        exp = 256**ii
+        mac_int += mac_part_int[6-1-ii] * exp
+    # add offset
+    mac_int += offset
+    # convert large int back to hex string
+    mac2_part_str = []
+    for ii in range(6, 0, -1):
+        exp = 256**(ii-1)
+        num = mac_int / exp
+        mac_int -= num * exp
+        mac2_part_str.append('%02X' % num)
+    mac2 = ':'.join(mac2_part_str)
+    return mac2
+
+
+'''
+ip_addr_mask is string like '11.22.33.240/24'.
+offset is int, and sum of both is returned.
+  '11.22.33.240/24' +  8 = '11.22.33.248/24'
+  '11.22.33.240/24' + 18 = '11.22.34.2/24'
+No special check is made for subnet overflow.
+'''
+def ip_address_add(ip_addr_mask, offset):
+    ip_addr, ip_mask = ip_addr_mask.split('/')
+    ip_part_str = ip_addr.split('.')
+    ip_part_int = [int(st) for st in ip_part_str]
+    ip_int = 0
+    for ii in range(4):
+        exp = 256**ii
+        ip_int += ip_part_int[4-1-ii] * exp
+    # add offset
+    ip_int += offset
+    # convert large int back to hex string
+    ip2_part_str = []
+    for ii in range(4, 0, -1):
+        exp = 256**(ii-1)
+        num = ip_int / exp
+        ip_int -= num * exp
+        ip2_part_str.append('%d' % num)
+    ip2 = '.'.join(ip2_part_str)
+    ip2 += '/' + ip_mask
+    return ip2
+
+
 def parse_args():
     log = logging.getLogger(__name__)
     class Args:
@@ -34,6 +90,19 @@ def parse_args():
     #
     parser.add_argument('-b', '--bridge', default=settings.OSV_BRIDGE,
                        help='Ethernet bridge to use.')
+    parser.add_argument('--net-mode', default=VMParam.NET_DHCP, choices=[VMParam.NET_DHCP, VMParam.NET_STATIC],
+                       help='Static or DHCP network mode.')
+    parser.add_argument('--net-mac', default='rand',
+                       help='MAC address (52:54:00:xx:xx:xx), default is random. '
+                            'Offset (orte_ess_vpid-1) will be added to user-supplied MAC to ensure multiple VMs don\'t use same address.')
+    parser.add_argument('--net-ip', default='',
+                       help='IP address in CIDR format (say 192.168.122.10/24). '
+                            'Implies static IP configuration. '
+                            'Offset (orte_ess_vpid-1) will be added to user-supplied IP to ensure multiple VMs don\'t use same address.')
+    parser.add_argument('--net-gw', default=settings.OSV_GW,
+                       help='Network default gateway.')
+    parser.add_argument('--net-dns', default=settings.OSV_NS,
+                       help='DNS server.')
     #
     parser.add_argument('-u', '--unsafe-cache', action='store_true',
                        help='Set cache to unsafe.')
@@ -68,7 +137,25 @@ def parse_args():
         args.gdb_port = 1234  # randint(10000, 20000)
     log.info('Cmdline args: %s' % str(args))
 
-    # args.osv_command = '/usr/lib/orted.so /usr/lib/mpi_hello.so'.split()  # list of strings
+    # Finalize networking params.
+    if args.net_ip:
+        # static IP explicitly requested, force static mode
+        args.net_mode = VMParam.NET_STATIC
+    # Adjust mac and IP address if supplied
+    orte_ess_vpid = 1  # mpirun starts incrementing orte_ess_vpid from 1
+    if 'orte_ess_vpid' in sys.argv:
+        ii = sys.argv.index('orte_ess_vpid')
+        assert(sys.argv[ii-1] == '-mca')
+        orte_ess_vpid = int(sys.argv[ii+1])
+    if args.net_mac != 'rand':
+        args.net_mac = mac_address_add(args.net_mac, orte_ess_vpid-1)
+    if args.net_ip:
+        args.net_ip = ip_address_add(args.net_ip, orte_ess_vpid-1)
+    # if static IP should be used, and there is no explicit IP supplied, use random IP address
+    if args.net_mode == VMParam.NET_STATIC and args.net_ip == '':
+        args.net_ip = get_rand_ip_address(settings.OSV_IP_SUBNET, settings.OSV_IP_PREFIX, settings.OSV_IP_MIN, settings.OSV_IP_MAX)
+    log.info('VM MAC %s, IP %s, GW %s, DNS %s', args.net_mac, args.net_ip, args.net_gw, args.net_dns)
+
     # All unknown params are passed to orted.so
     args.osv_command = deepcopy(sys.argv)
     assert(args.osv_command[0].endswith('/lin_proxy.py'))
@@ -106,10 +193,14 @@ def parse_args():
 
     return args
 
-
-def get_network_param():
+'''
+Generate random static IP from subnet ip0 with netmask.
+Random value is in range [ip0 + ipmin, ip0 + ipmax].
+For params ('192.168.122.0', 24, 200, 250) is returned
+'192.168.122.xx/24', with 200 <= xx <= 250
+'''
+def get_rand_ip_address(ip0, net_prefix, ipmin, ipmax):
     log = logging.getLogger(__name__)
-    net_mac = 'rand'
 
     ## net_ip = settings.'192.168.122.%d/24' % randint(200, 250)
     ip0 = settings.OSV_IP_SUBNET
@@ -135,12 +226,8 @@ def get_network_param():
     for ii in range(4):
         ip_bytes[ii] = (ip_i32 - ip_i32_cumsum) / 256**(3-ii)
         ip_i32_cumsum += ip_bytes[ii] * 256**(3-ii)
-    net_ip = '%d.%d.%d.%d/%d' % (ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], settings.OSV_IP_MASK)
-
-    net_gw = settings.OSV_GW
-    net_dns = settings.OSV_NS
-    log.info('VM MAC %s, IP %s, GW %s, DNS %s', net_mac, net_ip, net_gw, net_dns)
-    return net_mac, net_ip, net_gw, net_dns
+    net_ip = '%d.%d.%d.%d/%d' % (ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], net_prefix)
+    return net_ip
 
 
 def main():
@@ -155,26 +242,19 @@ def main():
         # others need write perm (libvirt, kvm)
         os.chmod(settings.OSV_WORK_DIR, 0777)
     args = parse_args()
-    #
+
+
     # run new VM
-    # unsafe-cache for NFS mount
-
-    net_mac, net_ip, net_gw, net_dns = get_network_param()
-    if settings.OSV_IP_MODE == VMParam.NET_DHCP:
-        # if net_ip isn't set, DHCP will be used
-        net_ip = ''
-        net_gw = ''
-        net_dns = ''
-
-
-
     vm = VM(debug=True,
             image=args.image,
             command='',
             cpus=args.cpus,
             memory=args.memory,
             use_image_copy=True,
-            net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
+            net_mac=args.net_mac,
+            net_ip=args.net_ip,
+            net_gw=args.net_gw,
+            net_dns=args.net_dns,
             bridge=args.bridge,
             gdb_port=args.gdb_port)
     stdout_data = vm.run(wait_up=True)
