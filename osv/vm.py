@@ -47,8 +47,10 @@ class VMParam:
                  net_mac='',  # '52:54:00:12:34:56' is default in run.py
                  net_gw='',
                  net_dns='',
+                 bridge=settings.OSV_BRIDGE,
 
                  gdb_port=0,
+                 unsafe_cache=False,
                  verbose=False,
                  debug=False
                  ):
@@ -58,6 +60,7 @@ class VMParam:
         self._full_command_line = ''
         self._cpus = cpus
         self._memory = memory
+        self._unsafe_cache = unsafe_cache
         self._debug = debug
         self._verbose = verbose
         # image relative to OSV_SRC, or abs path
@@ -83,6 +86,7 @@ class VMParam:
 
         self._gdb_port = gdb_port
 
+        self._bridge = bridge
         self._net_ip = net_ip
         self._net_gw = net_gw
         self._net_dns = net_dns
@@ -230,10 +234,11 @@ class VM:
         #   none + native, not available on all hosts/filesystems (err: file system may not support O_DIRECT)
         #   unsafe + native - rejected by libvirt, err: unsupported configuration: native I/O needs either no disk cache or directsync cache mode, QEMU will fallback to aio=threads
         #   unsafe + threads - is ok
-        image_cache_mode, image_io_mode = 'none', 'native'
-        #image_cache_mode, image_io_mode = 'unsafe', 'threads'  # ok
+        if self._param._unsafe_cache:
+            image_cache_mode, image_io_mode = 'unsafe', 'threads'
+        else:
+            image_cache_mode, image_io_mode = 'none', 'native'
 
-        image_cache_mode, image_io_mode = 'unsafe', 'threads'  # ok
         self._console_log = '%s/%s-console.log' % (settings.OSV_WORK_DIR, self._param._vm_name)
         vm_param = {'name': self._param._vm_name,
                     'memory': self._param._memory,
@@ -242,7 +247,7 @@ class VM:
                     'image_cache_mode': image_cache_mode,
                     'image_io_mode': image_io_mode,
                     'net_mac': self._param._net_mac,
-                    'net_bridge': settings.OSV_BRIDGE,
+                    'net_bridge': self._param._bridge,
                     'console_log': self._console_log,
                     'gdb_port': self._param._gdb_port,
                     }

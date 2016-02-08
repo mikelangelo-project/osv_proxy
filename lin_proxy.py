@@ -11,20 +11,9 @@ from random import randint
 import argparse
 from copy import deepcopy
 import psutil
+import shlex
 
 import conf.settings as settings
-
-def copy_env(vm):
-    """
-    Copy all environment variables of current process to OSv VM.
-    Ignore variables without value (like SELINUX_LEVEL_REQUESTED on fedora) - http PUT would fail.
-    """
-    log = logging.getLogger(__name__)
-    for name in environ.keys():
-        value = str(environ.get(name))
-        ## log.info('Env %s = %s', name, value)
-        if(value):
-            vm.env_api(name).set(value)
 
 
 def parse_args():
@@ -32,38 +21,84 @@ def parse_args():
     class Args:
         pass
     args = Args()
-    args.unsafe_cache = True
-    args.image = settings.OSV_SRC + '/build/debug/usr.img'
 
-    # just use all cpus, all memory ?
-    args.cpus = psutil.cpu_count()
-    args.memory = psutil.virtual_memory().total / (1024*1024)
-    args.memory = int( args.memory * 0.50)  # until some better idea
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('-i', '--image', default='',
+                       help='Path to OSv image. Absolute or relative to OSC_SRC dir.')
+    parser.add_argument('-m', '--memory', default=512,
+                       help='VM memory in MB')
+    parser.add_argument('-c', '--cpus', default=psutil.cpu_count(),
+                       help='Number of CPUs')
+    parser.add_argument('--nfs', default=[], metavar='NFS mount', action='append',
+                       help='Additional NFS mountpoints. Example: --nfs "nfs://192.168.122.1/ggg/?uid=0 /fff"')
+    #
+    parser.add_argument('-b', '--bridge', default=settings.OSV_BRIDGE,
+                       help='Ethernet bridge to use.')
+    #
+    parser.add_argument('-u', '--unsafe-cache', action='store_true',
+                       help='Set cache to unsafe.')
+    parser.add_argument('-g', '--gdb', action='store_true',
+                       help='Enable gdb at port 1234.')
+    parser.add_argument('--gdb-port', default=0, metavar='PORT',
+                       help='Enable gdb at port PORT')
 
-    args.env = []
-    args.env = ['MPI_BUFFER_SIZE=2100100', 'TERM=xterm']
+    '''
+    In command
+    mpirun -n 2 -H 127.0.0.2 --launch-agent "/lin_proxy.sh -c4 -m1024 --bb='cc dd' " -wd / /usr/lib/mpi_hello.so
+    mpirun calls lin_proxy.py as
+    /lin_proxy.py -c4 -m1024 --bb='cc dd' -mca ess env -mca orte_ess_jobid 1899888640 -mca orte_ess_vpid 1 -mca orte_ess_num_procs 2 ...
+        --tree-spawn -mca orte_launch_agent "/lin_proxy.sh -c4 -m1024 --bb='cc dd' " --tree-spawn
+    In above, argparse would like to interpret -mca as memory settings. So we parse string STR from '-mca orte_launch_agent STR'.
+
+    But if script is called without mpirun (say simple -h switch), then all params are for us.
+    '''
+    if 'orte_launch_agent' in sys.argv:
+        ii = sys.argv.index('orte_launch_agent')
+        assert(sys.argv[ii-1] == '-mca')
+        our_argv_str = sys.argv[ii+1]
+        # our_argv_str is now "/lin_proxy.sh -c4 -m1024 --bb='cc dd' "
+        our_argv = shlex.split(our_argv_str)
+    else:
+        # we were not called via mpirun
+        our_argv = sys.argv
+    log.debug('our_argv %s' % str(our_argv))
+    args = parser.parse_args(our_argv[1:])
+
+    if args.gdb and args.gdb_port == 0:
+        args.gdb_port = 1234  # randint(10000, 20000)
+    log.info('Cmdline args: %s' % str(args))
 
     # args.osv_command = '/usr/lib/orted.so /usr/lib/mpi_hello.so'.split()  # list of strings
+    # All unknown params are passed to orted.so
     args.osv_command = deepcopy(sys.argv)
-    log.info('sys.argv: %s' % str(sys.argv))
     assert(args.osv_command[0].endswith('/lin_proxy.py'))
     args.osv_command[0] = '/usr/lib/orted.so'
+    # Check and remove all our params
+    for ii in range(1, len(our_argv)):
+        argv1 = args.osv_command[ii]
+        argv2 = our_argv[ii]
+        assert(argv1 == argv2)
+    log.debug('Removing our_argv: %s' % str(args.osv_command[1: len(our_argv)]))
+    del args.osv_command[1: len(our_argv)]
     # remove args "-mca orte_launch_agent /home/justin_cinkelj/devel/mikelangelo/osv_proxy/lin_proxy.py"
     for ii in range(2, len(args.osv_command)):
         arg0 = args.osv_command[ii-2]
         arg1 = args.osv_command[ii-1]
         arg2 = args.osv_command[ii]
-        log.debug('ii=%d arg0 %s', ii, arg0)
-        if arg0 == '-mca' and arg1 == 'orte_launch_agent' and arg2.endswith('/lin_proxy.py'):
+        #log.debug('ii=%d arg0_1_2 %s %s %s', ii, arg0, arg1, arg2)
+        # arg2 will be "/lin_proxy.sh -c4 -m104 --bb='cc dd'"
+        arg2_program = arg2.split(' ')[0]
+        if arg0 == '-mca' and arg1 == 'orte_launch_agent' and \
+                (arg2_program.endswith('/lin_proxy.sh') or arg2_program.endswith('/lin_proxy.py')):
             log.info('args.osv_command remove: %s' % str(args.osv_command[ii-2: ii+1]))
             del args.osv_command[ii-2: ii+1]
             break  # ii is invalid now
-    # escape ';' TODO pipes.quote ?
+    # escape ';' in orte_hnp_uri
     for ii in range(2, len(args.osv_command)):
         arg0 = args.osv_command[ii-2]
         arg1 = args.osv_command[ii-1]
         arg2 = args.osv_command[ii]
-        log.debug('ii=%d arg0 %s', ii, arg0)
+        #log.debug('ii=%d arg0_1_2 %s %s %s', ii, arg0, arg1, arg2)
         if arg0 == '-mca' and arg1 == 'orte_hnp_uri' and (';tcp' in arg2):
             log.info('args.osv_command orte_hnp_uri add quote to %s' % str(args.osv_command[ii-2: ii+1]))
             args.osv_command[ii] = '"' + arg2 + '"'
@@ -131,10 +166,7 @@ def main():
         net_gw = ''
         net_dns = ''
 
-    gdb_port = 0  # disable gdb
-    # gdb_port = randint(10000, 20000) # enable gdb at rand port
 
-    osv_command = ' '.join(args.osv_command)
 
     vm = VM(debug=True,
             image=args.image,
@@ -143,20 +175,19 @@ def main():
             memory=args.memory,
             use_image_copy=True,
             net_mac=net_mac, net_ip=net_ip, net_gw=net_gw, net_dns=net_dns,
-            gdb_port=gdb_port)
+            bridge=args.bridge,
+            gdb_port=args.gdb_port)
     stdout_data = vm.run(wait_up=True)
     sys.stdout.write(stdout_data)
     sys.stdout.flush()
 
-    # copy_env is not needed any more
-    # Now lin_proxy.py starts VM with orted.so, and orted.so will set up OpenMPI related env vars.
-    # copy_env(vm)
-    # Add additional env vars added by user (those required by the OpenFOAM app).
-    for env_var in args.env:
-        name, value = env_var.split('=', 1)
-        vm.env_api(name).set(value)
-
+    for nfs_mount in args.nfs:
+        mount_cmd = '/tools/mount-nfs.so %s' % nfs_mount
+        log.info('Run mount_cmd %s', mount_cmd)
+        vm.app_api(mount_cmd).run()
+    # Does http call return before mount is finished ? Then osv_commnad might try to use NFS before its mounted.
     # osv_command = '/usr/lib/mpi_hello.so 192.168.122.1 8080'
+    osv_command = ' '.join(args.osv_command)
     log.info('Run program %s', osv_command)
     if osv_command:
         vm.app_api(osv_command).run()
@@ -223,8 +254,9 @@ if __name__ == '__main__':
     logger.info('Start /*--------------------------------*/')
     ii = 0
     for arg in sys.argv:
-        logger.info('  argv[%d] = %s', ii, arg)
+        logger.debug('  argv[%d] = %s', ii, arg)
         ii += 1
+    logger.info('  argv = %s', ' '.join(sys.argv))
     main()
     logger.info('Done /*--------------------------------*/')
 
