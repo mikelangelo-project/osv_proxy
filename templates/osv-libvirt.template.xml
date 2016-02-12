@@ -10,6 +10,13 @@
   <name>{{ vm.name }}</name>
   <memory unit='MiB'>{{ vm.memory }}</memory>
   <vcpu placement='static'>{{ vm.vcpu_count }}</vcpu>
+  <cputune>
+    {% if vm.cpu_pin %}
+    {% for ii in range(vm.vcpu_count) %}
+    <vcpupin vcpu='{{ii}}' cpuset='{{ii}}'/>
+    {% endfor %}
+    {% endif %}
+  </cputune>
   <os>
     <type arch='x86_64'>hvm</type>
     <boot dev='hd'/>

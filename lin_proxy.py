@@ -104,6 +104,8 @@ def parse_args():
     parser.add_argument('--net-dns', default=settings.OSV_NS,
                        help='DNS server.')
     #
+    parser.add_argument('--no-cpu-pin', action='store_true',
+                       help='Disable VM CPU pinning.')
     parser.add_argument('-u', '--unsafe-cache', action='store_true',
                        help='Set cache to unsafe.')
     parser.add_argument('-g', '--gdb', action='store_true',
@@ -256,6 +258,7 @@ def main():
             net_gw=args.net_gw,
             net_dns=args.net_dns,
             bridge=args.bridge,
+            cpu_pin=not args.no_cpu_pin,
             gdb_port=args.gdb_port)
     stdout_data = vm.run(wait_up=True)
     sys.stdout.write(stdout_data)

@@ -50,6 +50,7 @@ class VMParam:
                  bridge=settings.OSV_BRIDGE,
 
                  gdb_port=0,
+                 cpu_pin=True,
                  unsafe_cache=False,
                  verbose=False,
                  debug=False
@@ -61,6 +62,7 @@ class VMParam:
         self._cpus = cpus
         self._memory = memory
         self._unsafe_cache = unsafe_cache
+        self._cpu_pin = cpu_pin
         self._debug = debug
         self._verbose = verbose
         # image relative to OSV_SRC, or abs path
@@ -249,6 +251,7 @@ class VM:
                     'net_mac': self._param._net_mac,
                     'net_bridge': self._param._bridge,
                     'console_log': self._console_log,
+                    'cpu_pin': self._param._cpu_pin,
                     'gdb_port': self._param._gdb_port,
                     }
         tmpl_env = Environment(loader=PackageLoader('lin_proxy', 'templates'))
