@@ -81,9 +81,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('-i', '--image', default='',
                        help='Path to OSv image. Absolute or relative to OSC_SRC dir.')
-    parser.add_argument('-m', '--memory', default=512,
+    parser.add_argument('-m', '--memory', type=int, default=512,
                        help='VM memory in MB')
-    parser.add_argument('-c', '--cpus', default=psutil.cpu_count(),
+    parser.add_argument('-c', '--cpus', type=int, default=psutil.cpu_count(),
                        help='Number of CPUs')
     parser.add_argument('--nfs', default=[], metavar='NFS mount', action='append',
                        help='Additional NFS mountpoints. Example: --nfs "nfs://192.168.122.1/ggg/?uid=0 /fff"')
@@ -108,7 +108,7 @@ def parse_args():
                        help='Set cache to unsafe.')
     parser.add_argument('-g', '--gdb', action='store_true',
                        help='Enable gdb at port 1234.')
-    parser.add_argument('--gdb-port', default=0, metavar='PORT',
+    parser.add_argument('--gdb-port', type=int, default=0, metavar='PORT',
                        help='Enable gdb at port PORT')
 
     '''
