@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 __author__ = 'justin_cinkelj'
 
 import logging
@@ -13,7 +15,8 @@ import shutil
 import sys
 import libvirt
 from jinja2 import Environment, PackageLoader
-
+import argparse
+import datetime
 
 # for '192.168.1.2/24' return '192.168.1.2' and '255.255.255.0'
 def cidr_to_ip_mask(cidr):
@@ -228,7 +231,7 @@ class VM:
         ## full_command_line = '--verbose ' + full_command_line  # run OSv VM in verbose mode
         # image edit.
         cmd = [os.path.join(settings.OSV_SRC, 'scripts/imgedit.py'), 'setargs', self._param._in_use_image, full_command_line]
-        print 'Set cmd: %s' % ' '.join(cmd)
+        print('Set cmd: %s' % ' '.join(cmd))
         check_call(cmd)
 
         name = str(uuid4())[:8]
@@ -458,5 +461,138 @@ class VM:
         return api_instance
 
 # logging.basicConfig(level=logging.DEBUG)
+
+
+'''
+For perm = '664', return 'rw-rw-r--'
+'''
+def _perm_num_to_str(perm):
+    map=['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx']
+    ret = ''
+    # special case: '0'
+    if perm == '0':
+        return '---'*3
+    for nn in perm:
+        ret += map[int(nn)]
+    return ret
+
+
+'''
+When called as
+python -m osv.vm IP get /usr/ ./tmp/
+
+A few exmaples:
+# get ./ttt2/fstab ...
+python -m osv.vm 192.168.122.89 get /etc  ttt2
+python -m osv.vm 192.168.122.89 get /etc/ ttt2
+
+# get ./ttt2/etc/fstab ...
+python -m osv.vm 192.168.122.89 get /etc/ ttt2/
+python -m osv.vm 192.168.122.89 get /etc  ttt2/
+
+# get ./ttt2/etc/fstab ./tt2/init/30-auto-00 ...
+python -m osv.vm 192.168.122.89 get /etc /init/ ttt2/
+
+# list
+python -m osv.vm 192.168.122.89 ls     /etc /init
+python -m osv.vm 192.168.122.89 ls -la /etc /init
+
+# help
+python -m osv.vm -h|--help
+python -m osv.vm help get
+
+'''
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('ip', help='VM IP address.')
+    parser.add_argument('cmd', choices=['ls', 'get'], help='Command to execute.')
+    args, cmd_argv = parser.parse_known_args(sys.argv[1:])  # skip $0 == vm.py filename
+    # print(args)
+
+    # special case: python -m osv.vm help get
+    if args.ip in ['-h', 'help']:
+        cmd_argv.insert(0, '--help')
+        vm = None
+        file_api = None
+    else:
+        vm = VM.connect_to_existing(args.ip)
+        file_api = vm.file_api()
+
+    # ---------------------------------------------------------------------------------------------
+    if args.cmd in ['get']:
+        parser2 = argparse.ArgumentParser(prog='osv.vm IP get')
+        parser2.add_argument('src', nargs='+', help='VM source file/directory to copy from')
+        parser2.add_argument('dest', help='Host destination file/directory to copy to')
+        args2 = parser2.parse_args(cmd_argv)
+
+        # multiple src files/directories, dest should be a dir.
+        # or dest ends with '/' - cp to dir was requested
+        dest_is_dir = len(args2.src) > 1 or args2.dest.endswith(os.path.sep)
+        if dest_is_dir:
+            if os.path.exists(args2.dest):
+                if os.path.isdir(args2.dest):
+                    pass  # all ok
+                else:
+                    print('Destination %s is exists, but is not a directory', args2.dest, file=sys.stderr)
+                    exit(1)
+            else:
+                os.mkdir(args2.dest)
+        for src in args2.src:
+            src_filename = os.path.split(src.rstrip(os.path.sep))[1]  # name of src file or directory
+            if dest_is_dir:
+                dest_filename = os.path.join(args2.dest, src_filename) # name of dest file or directory
+            else:
+                dest_filename = args2.dest
+            file_api.get(src, dest_filename)
+    # ---------------------------------------------------------------------------------------------
+    elif args.cmd in ['ls']:
+        parser2 = argparse.ArgumentParser(prog='osv.vm IP ls')
+        parser2.add_argument('-l', dest = 'long', action='store_true', help='Long listing format')
+        parser2.add_argument('-a', dest = 'all', action='store_true', help='Show . and ..')
+        parser2.add_argument('files', nargs='+')
+        args2 = parser2.parse_args(cmd_argv)
+        header_fmt = '%s:'
+        for dir in args2.files:
+            if len(args2.files) > 1:
+                # print header
+                print(header_fmt % dir)
+                header_fmt = '\n%s:'
+
+            dir_info = file_api._list_dir(dir)  # _list_dir returns info for dir, but [] for file :/
+            if not dir_info:
+                # must be file
+                file_dirname, file_filename= os.path.split(dir)
+                dir_info = file_api._list_dir(file_dirname)
+                for dir_info_cur in dir_info:
+                    if dir_info_cur['pathSuffix'] == file_filename:
+                        # print info, about that file only
+                        dir_info = [dir_info_cur]
+                        break
+            # else:
+            #    is a directory, all entries will be consumed
+
+            for di in dir_info:
+                name = di['pathSuffix']
+                if name in ['.', '..']:
+                    if not args2.all:
+                        continue
+                if args2.long:
+                    type = '-'  # FILE
+                    if di['type'] == 'DIRECTORY':
+                        type = 'd'
+                    perm = _perm_num_to_str(di['permission'])
+                    replica = di['replication']
+                    # print(''  di['owner'], di['group'], )
+                    # accessTime, modificationTime
+                    fmt = "%Y-%m-%d %H:%M:%S"
+                    tt = datetime.datetime.fromtimestamp(di['modificationTime']).strftime(fmt)
+                    length = di['length']
+                    #print('mod time = %s', tt)
+                    print('%s%s %2d %s %s %6d %s %s' % (type, perm, replica, di['owner'], di['group'], length, tt, name))
+                else:
+                    print('%s ' % (name))
+    # ---------------------------------------------------------------------------------------------
+    else:
+        print('Invalid commnand: %s', cmd, file=sys.stderr)
 
 ##

@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 __author__ = 'justin_cinkelj'
 '''
 REST api to access OSv VM.
@@ -13,6 +15,7 @@ import logging
 from distutils.version import LooseVersion, StrictVersion
 from time import sleep
 import simplejson
+import sys
 import os
 import os.path
 
@@ -29,7 +32,8 @@ class ApiResponseError(ApiError):
 
 class BaseApi:
     def __init__(self, vm):
-        assert(isinstance(vm, VM))
+        # TODO - why asserts if python -m osv.vm 192.168.122.89 get /usr ./tmp
+        # assert(isinstance(vm, VM))
         self.vm = vm
         self.base_path = ''
 
@@ -250,6 +254,21 @@ class File(BaseApi):
             else:
                 log.error('Unknown type %s (json data %s)', entry['type'], simplejson.dumps(entry) )
 
-
+    '''
+    Copy file or directory from VM at path src, to host to path dest.
+    '''
+    def get(self, src, dest):
+        params = {'op': 'LISTSTATUS'}
+        try:
+            content = self.http_get(params, path_extra=src)
+            if content == '[]':
+                # src is file, not directory
+                self._get_file(src, dest)
+            else:
+                # src is directory
+                self.get_dir(src, dest)
+        except ApiResponseError:
+            print('The src "%s" does not exist', src, file=sys.stderr)
+            raise
 
 ##
