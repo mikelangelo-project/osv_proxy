@@ -48,6 +48,9 @@
     <interface type='bridge'>
       <mac address='{{ vm.net_mac }}'/>
       <source bridge='{{ vm.net_bridge }}'/>
+      {% if vm.net_virtualport_type %}
+      <virtualport type='{{  vm.net_virtualport_type }}'/>
+      {% endif %}
       <model type='virtio'/>
     </interface>
 

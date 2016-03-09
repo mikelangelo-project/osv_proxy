@@ -7,7 +7,7 @@ import os
 import math
 from uuid import uuid4
 import settings
-from subprocess import Popen, check_call
+from subprocess import Popen, check_call, check_output, CalledProcessError
 from time import sleep
 from random import randint
 import pipes
@@ -264,6 +264,24 @@ class VM:
                     'cpu_pin': self._param._cpu_pin,
                     'gdb_port': self._param._gdb_port,
                     }
+
+        # Try to figure out if openVSwitch bridge is used
+        try:
+            # Fedora and Ubuntu both needs sudo
+            ovs_bridges = check_output('sudo ovs-vsctl list-br'.split())
+            if self._param._bridge in ovs_bridges.splitlines():
+                vm_param['net_virtualport_type'] = 'openvswitch'
+        except OSError as ex:
+            if ex.errno == 2:
+                # OSError(2, 'No such file or directory')
+                # Must be normal bridge
+                pass
+            raise
+        except CalledProcessError as ex:
+            # sudo rights missing?
+            # Make a guess it is normal bridge
+            pass
+
         tmpl_env = Environment(loader=PackageLoader('lin_proxy', 'templates'))
         template = tmpl_env.get_template('osv-libvirt.template.xml')
         xml = template.render(vm=vm_param)
