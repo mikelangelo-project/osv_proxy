@@ -52,6 +52,7 @@ class VMParam:
                  net_dns='',
                  bridge=settings.OSV_BRIDGE,
 
+                 osv_log='',
                  gdb_port=0,
                  cpu_pin=True,
                  unsafe_cache=False,
@@ -89,6 +90,7 @@ class VMParam:
         else:
             self._in_use_image = self._image_orig
 
+        self._log = osv_log
         self._gdb_port = gdb_port
 
         self._bridge = bridge
@@ -165,16 +167,21 @@ class VMParam:
                     cmd_net += ' --nameserver=%s' % self._net_dns
 
         full_command = ''
+        # console redirection is passed via run.py -e switch too
+        if self._log:
+            full_command += '--redirect=%s ' % self._log
+        # add static IP configuration (and default cli app or user-specified app)
         if cmd_net:
             # net_cmd for static ip must be passed as part of command (with default cli.so or with user-defined app)
             if self._command:
-                full_command = '%s %s' % (cmd_net, self._command)
+                full_command += '%s %s' % (cmd_net, self._command)
             else:
-                full_command = '%s %s' % (cmd_net, settings.OSV_CLI_APP)
+                full_command += '%s %s' % (cmd_net, settings.OSV_CLI_APP)
         elif self._command:
-            full_command = self._command
+            full_command += self._command
         else:
-            full_command =  settings.OSV_CLI_APP
+            full_command +=  settings.OSV_CLI_APP
+        # add -e command to full_command
         if full_command:
             #arg.extend(['-e', pipes.quote(full_command)])
             arg.extend(['-e', full_command])

@@ -110,6 +110,9 @@ def parse_args():
                        help='Set cache to unsafe.')
     parser.add_argument('-g', '--gdb', action='store_true',
                        help='Enable gdb at port 1234.')
+    parser.add_argument('--log',
+                       help='Write OSv stdout/err to log instead to console. '
+                       'Log file is stored inside VM.')
     parser.add_argument('--gdb-port', type=int, default=0, metavar='PORT',
                        help='Enable gdb at port PORT')
 
@@ -259,6 +262,7 @@ def main():
             net_dns=args.net_dns,
             bridge=args.bridge,
             cpu_pin=not args.no_cpu_pin,
+            osv_log=args.log,
             gdb_port=args.gdb_port)
     stdout_data = vm.run(wait_up=True)
     sys.stdout.write(stdout_data)
