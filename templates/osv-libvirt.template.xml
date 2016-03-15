@@ -13,9 +13,9 @@
   <cputune>
     {% if vm.cpu_pin %}
     {% for ii in range(vm.vcpu_count) %}
-    <vcpupin vcpu='{{ii}}' cpuset='{{ii}}'/>
+    <vcpupin vcpu='{{ii}}' cpuset='{{ vm.cpu_pin_pcpu_0 + ii }}'/>
     {% endfor %}
-    <emulatorpin cpuset='0-{{ vm.vcpu_count-1 }}'/>
+    <emulatorpin cpuset='{{ vm.cpu_pin_pcpu_0 }}-{{ vm.cpu_pin_pcpu_0 + vm.vcpu_count-1 }}'/>
     {% endif %}
   </cputune>
   {% if vm.cpu_pin %}

@@ -55,6 +55,7 @@ class VMParam:
                  osv_log='',
                  gdb_port=0,
                  cpu_pin=True,
+                 cpu_pin_pcpu_0=0,
                  unsafe_cache=False,
                  verbose=False,
                  debug=False
@@ -67,6 +68,7 @@ class VMParam:
         self._memory = memory
         self._unsafe_cache = unsafe_cache
         self._cpu_pin = cpu_pin
+        self._cpu_pin_pcpu_0 = cpu_pin_pcpu_0
         self._debug = debug
         self._verbose = verbose
         # image relative to OSV_SRC, or abs path
@@ -196,7 +198,7 @@ class VM:
     net_ip is in CIDR notation 'ip/bits'
     """
     def __init__(self, **kwargs):
-        self._param = VMParam(**kwargs)
+        self._param = VMParam(cpu_pin_pcpu_0=4, **kwargs)
 
         # other vars
         self._child_cmdline_up = False
@@ -262,6 +264,7 @@ class VM:
                     'net_bridge': self._param._bridge,
                     'console_log': self._console_log,
                     'cpu_pin': self._param._cpu_pin,
+                    'cpu_pin_pcpu_0': self._param._cpu_pin_pcpu_0,
                     'gdb_port': self._param._gdb_port,
                     }
 
